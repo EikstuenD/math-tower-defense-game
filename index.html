@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matte-Forsvarerne 8.0</title>
+    <title>Matte-Forsvarerne 8.1</title>
     <style>
         :root {
             --bg-color: #202028;
@@ -538,7 +538,7 @@
         document.getElementById('stat-shots').innerText = statsShots;
         document.getElementById('stat-kills').innerText = statsKills;
         let acc = statsShots > 0 ? Math.round((statsKills / statsShots) * 100) : 100;
-        if(acc > 100) acc = 100; // Splash damage kan gi over 100%, capper det
+        if(acc > 100) acc = 100; 
         document.getElementById('stat-accuracy').innerText = acc + "%";
         document.getElementById('combo-count').innerText = comboStreak;
         
@@ -638,13 +638,12 @@
                             bossSpawnedInWave = true;
                             document.getElementById('boss-warning').style.display = 'none';
                             waitingForBoss = false;
-                        }, 3000); // 3 sekunder varsel
+                        }, 3000); 
                     }
                 }
             }
 
             // 3. Sjekk om runden er ferdig
-            // (Må være ferdig med spawn, ingen boss-venting, og ingen fiender igjen)
             if (waveEnemiesSpawned >= waveTotalEnemies && enemies.length === 0 && !waitingForBoss) {
                 if (!isBossLevel || (isBossLevel && bossSpawnedInWave)) {
                     waveActive = false;
@@ -996,7 +995,7 @@
             comboStreak++;
             if(comboStreak === 3) {
                 gold += 50;
-                floatingTexts.push(new FloatingText(400, 300, "COMBO! +50 GULL", var(--neon-pink)));
+                floatingTexts.push(new FloatingText(400, 300, "COMBO! +50 GULL", '#ff00ff'));
                 playSound('levelup');
             }
             updateStatsUI();
