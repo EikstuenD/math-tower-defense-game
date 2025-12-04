@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matte-Forsvarerne 10.0 - 3D Edition</title>
+    <title>Matte-Forsvarerne 10.1</title>
     <style>
         :root {
             --bg-color: #202028;
@@ -114,7 +114,6 @@
         canvas {
             display: block;
             cursor: crosshair;
-            /* image-rendering: pixelated; Fjernet for mykere 3D-look */
         }
 
         /* --- MENYER OG MODALER --- */
@@ -524,7 +523,7 @@
         }
         oCtx.globalAlpha = 1.0;
 
-        return offCanvas; // Returnerer kun bakgrunnen, stien tegnes i drawGame
+        return offCanvas; // Returnerer kun bakgrunnen
     }
 
     // --- LOGIKK ---
@@ -751,7 +750,7 @@
             ctx.fillStyle = '#f1c40f'; ctx.font = '10px Courier New'; ctx.fillText("★" + this.level, this.x + 20, this.y + 15);
         }
     }
-    // Helper function to shade colors (StackOverflow magic)
+    // Helper function to shade colors
     const pSBC=(p,c0,c1,l)=>{let r,g,b,P,f,t,h,i=parseInt,m=Math.round,a=typeof(c1)=="string";if(typeof(c0)!="string"||typeof(c1)!="string"&&!a)return null;if(typeof(c0)!="string"||typeof(c1)=="string"&&a)return null;h=c0.length>9,h=a?c1.length>9?true:c1=="c"?!h:false:h,f=pSBC.pSBCr(c0),P=p<0,t=c1&&c1!="c"?pSBC.pSBCr(c1):P?{r:0,g:0,b:0,a:-1}:{r:255,g:255,b:255,a:-1},p=P?p*-1:p,P=1-p;if(!f||!t)return null;if(l){r=m(P*f.r+p*t.r),g=m(P*f.g+p*t.g),b=m(P*f.b+p*t.b);if(a)return"rgb("+r+","+g+","+b+")";var x=0,y=0,z=0;if(f.a!=-1||t.a!=-1){x=f.a!=-1?f.a:1,y=t.a!=-1?t.a:1,z=m((P*x+p*y)*100)/100;if(a)return"rgba("+r+","+g+","+b+","+z+")";return"rgba("+r+","+g+","+b+","+z+")"}}else{r=m(P*f.r+p*t.r),g=m(P*f.g+p*t.g),b=m(P*f.b+p*t.b);if(a)return"rgb("+r+","+g+","+b+")";return"rgb("+r+","+g+","+b+")"}};pSBC.pSBCr=(d)=>{let n=d.length,x={};if(n>9){if(d.substring(0,3)=="rgb"){x.r=parseInt(d.substring(4).split(",")[0]),x.g=parseInt(d.substring(4).split(",")[1]),x.b=parseInt(d.substring(4).split(",")[2]),x.a=parseFloat(d.substring(4).split(",")[3])}else{return null}}else{if(n==8||n==6||n<4){return null}if(n<6)d="#"+d[1]+d[1]+d[2]+d[2]+d[3]+d[3]+(n>4?d[4]+d[4]:"");d=parseInt(d.substring(1),16),x.r=d>>24&255,x.g=d>>16&255,x.b=d>>8&255,x.a=n>5?Math.round((d&255)/2.55)/100:-1}return x};
 
 
@@ -824,7 +823,7 @@
         // Skygge/Kant
         ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 55;
         ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y + 5);
-        mapData.path.forEach(p => oCtx.lineTo(p.x, p.y + 5)); ctx.stroke();
+        mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); ctx.stroke();
         // Selve veien
         ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45;
         ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y);
@@ -845,7 +844,7 @@
         });
     }
 
-    // --- INTERAKSJON & MATTE (Uendret fra v9) ---
+    // --- INTERAKSJON & MATTE ---
     canvas.addEventListener('mousemove', function(e) { const rect = canvas.getBoundingClientRect(); mouseX = e.clientX - rect.left; mouseY = e.clientY - rect.top; });
     canvas.addEventListener('mousedown', function(e) {
         if (gameState !== 'PLAYING') return; const rect = canvas.getBoundingClientRect(); const mx = e.clientX - rect.left, my = e.clientY - rect.top;
