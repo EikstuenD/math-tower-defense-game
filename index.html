@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matte-Forsvarerne 19.0</title>
+    <title>Matte-Forsvarerne 20.0</title>
     <style>
         :root {
             --bg-color: #202028;
@@ -288,7 +288,7 @@
     </div>
 
 <script>
-    // --- SAFE SHADE COLOR FUNCTION ---
+    // --- 1. SIKKER FARGE-FUNKSJON ---
     function shadeColor(color, percent) {
         var R = parseInt(color.substring(1,3),16);
         var G = parseInt(color.substring(3,5),16);
@@ -319,25 +319,14 @@
 
     // Entities
     let mapBackgroundImage = null;
-    let towers = [];
-    let enemies = [];
-    let projectiles = [];
-    let particles = [];
-    let floatingTexts = [];
-    let traps = []; 
-
-    // Logic Vars
+    let towers = [], enemies = [], projectiles = [], particles = [], floatingTexts = [], traps = []; 
     let currentPath = [];
-    let pendingBuildPos = null, pendingTowerType = null;
-    let selectedTower = null; 
-    let currentMathAnswer = null;
-    let currentAction = ''; 
+    let pendingBuildPos = null, pendingTowerType = null, selectedTower = null; 
+    let currentMathAnswer = null, currentAction = ''; 
     let audioCtx = null;
     let waveEnemiesSpawned = 0, waveTotalEnemies = 0;
     let bossSpawnedInWave = false, waitingForBoss = false;
-    let lavaOffset = 0;
-    let freezeTimer = 0; 
-
+    let lavaOffset = 0, freezeTimer = 0; 
     let mouseX = 0, mouseY = 0;
 
     // --- DATA ---
@@ -490,6 +479,7 @@
         return false;
     }
 
+    // --- KLASSER ---
     class Trap {
         constructor(x, y, type) { this.x = x; this.y = y; this.type = type; this.level = 1; this.dead = false; if(type === 'spikes') { this.uses = 10; this.dmg = 10; this.emoji = '📌'; } if(type === 'glue') { this.uses = 20; this.slowFactor = 0.5; this.emoji = '🍯'; } if(type === 'bomb') { this.uses = 1; this.dmg = 100; this.emoji = '💣'; } }
         update() { if (this.dead) return; for(let e of enemies) { if(Math.hypot(e.x - this.x, e.y - this.y) < 15) { if(this.type === 'spikes') { e.health -= this.dmg; this.uses--; playSound('shoot'); } if(this.type === 'glue') { e.speed = e.baseSpeed * this.slowFactor; this.uses--; } if(this.type === 'bomb') { createParticles(this.x, this.y, 'orange'); playSound('explosion'); enemies.forEach(en => { if(Math.hypot(en.x - this.x, en.y - this.y) < 100) en.health -= this.dmg; }); this.uses = 0; } if(this.uses <= 0) this.dead = true; } } }
@@ -533,6 +523,45 @@
     function toggleSpeed() { if(gameState !== 'PLAYING') return; speedMultiplier = (speedMultiplier === 1) ? 3 : 1; updateSpeedBtn(); }
     function updateSpeedBtn() { const btn = document.getElementById('speed-btn'); if(speedMultiplier > 1) btn.classList.add('btn-speed-active'); else btn.classList.remove('btn-speed-active'); }
 
+    function startNextWave() {
+        waveActive = true;
+        speedMultiplier = 1; updateSpeedBtn();
+        document.getElementById('next-wave-container').classList.add('hidden');
+        frameCount = 0; waveEnemiesSpawned = 0; bossSpawnedInWave = false; waitingForBoss = false;
+        waveTotalEnemies = 5 + (wave * 2); 
+        statsShots = 0; statsKills = 0; updateStatsUI();
+        playSound('levelup');
+    }
+
+    function backToMenu() {
+        if(!confirm("Avslutte til meny?")) return;
+        gameState = 'MENU';
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('pause-screen').classList.add('hidden');
+        document.getElementById('math-overlay').classList.add('hidden');
+        document.getElementById('tower-select-overlay').classList.add('hidden');
+        document.getElementById('tower-upgrade-overlay').classList.add('hidden');
+        document.getElementById('start-screen').classList.remove('hidden');
+        document.getElementById('next-wave-container').classList.add('hidden');
+        document.getElementById('boss-warning').style.display = 'none';
+    }
+    
+    function restartGame() {
+        document.getElementById('game-over-screen').classList.add('hidden');
+        initGame();
+    }
+
+    function togglePause() {
+        if(gameState === 'PLAYING') {
+            gameState = 'PAUSED';
+            document.getElementById('pause-screen').classList.remove('hidden');
+        } else if (gameState === 'PAUSED') {
+            gameState = 'PLAYING';
+            document.getElementById('pause-screen').classList.add('hidden');
+            gameLoop();
+        }
+    }
+
     function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
     function playSound(type) { if (!audioCtx) return; const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); const t = audioCtx.currentTime; if (type==='shoot') { o.frequency.setValueAtTime(600, t); o.frequency.exponentialRampToValueAtTime(100, t+0.1); g.gain.setValueAtTime(0.05, t); o.type='square'; o.start(t); o.stop(t+0.1); } if (type==='explosion') { o.type='sawtooth'; o.frequency.setValueAtTime(100, t); o.frequency.exponentialRampToValueAtTime(10, t+0.3); g.gain.setValueAtTime(0.1, t); o.start(t); o.stop(t+0.3); } if (type==='success') { o.type='triangle'; o.frequency.setValueAtTime(400, t); o.frequency.linearRampToValueAtTime(800, t+0.2); g.gain.setValueAtTime(0.1, t); o.start(t); o.stop(t+0.2); } if (type==='error') { o.type='sawtooth'; o.frequency.setValueAtTime(150, t); o.frequency.linearRampToValueAtTime(100, t+0.3); g.gain.setValueAtTime(0.1, t); o.start(t); o.stop(t+0.3); } if (type==='levelup') { o.type='sine'; o.frequency.setValueAtTime(300, t); o.frequency.linearRampToValueAtTime(600, t+0.2); o.frequency.linearRampToValueAtTime(900, t+0.4); g.gain.setValueAtTime(0.1, t); o.start(t); o.stop(t+0.6); } if (type==='hurt') { o.type='sawtooth'; o.frequency.setValueAtTime(100, t); o.frequency.linearRampToValueAtTime(50, t+0.2); g.gain.setValueAtTime(0.2, t); o.start(t); o.stop(t+0.2); } }
     document.getElementById('math-answer').addEventListener("keypress", function(e) { if (e.key === "Enter") checkAnswer(); });
@@ -546,7 +575,7 @@
             ctx.strokeStyle = grad; ctx.beginPath(); for(let i=100; i<600; i+=150) { ctx.moveTo(0, i + Math.sin(lavaOffset/10 + i)*20); ctx.bezierCurveTo(200, i-50, 600, i+50, 800, i + Math.cos(lavaOffset/10 + i)*30); } ctx.stroke(); ctx.globalCompositeOperation = 'source-over';
         }
         let mapData = maps[selectedMap]; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 55; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y + 5); 
-        mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); 
+        mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); // Fikset her (var oCtx før)
         ctx.stroke(); 
         ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y); mapData.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
         let end = currentPath[currentPath.length-1]; ctx.font = '40px Arial'; ctx.fillText("🏰", end.x, end.y - 10);
