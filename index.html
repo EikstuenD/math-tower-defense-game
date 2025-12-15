@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matte-Forsvarerne 1.0 (Stabil)</title>
+    <title>Matte-Forsvarerne 2.0</title>
     <style>
         :root {
             --neon-green: #39ff14;
@@ -51,6 +51,7 @@
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-green { background: #27ae60; border-color: #2ecc71; }
         .btn-red { background: #c0392b; border-color: #e74c3c; }
+        .btn-blue { background: #2980b9; border-color: #3498db; }
         
         .selected-btn { 
             background: var(--neon-pink) !important; border-color: #ffccff !important; 
@@ -61,12 +62,25 @@
         .btn-pulse { animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); box-shadow: 0 0 15px var(--neon-green); } 100% { transform: scale(1); } }
 
+        /* TÅRN MENYER */
+        #tower-select-menu, #tower-upgrade-menu {
+            background: #000080; border: 4px double #fff; padding: 15px;
+            color: white; text-align: center; box-shadow: 10px 10px 0 #000;
+        }
+        .tower-option {
+            display: inline-block; margin: 5px; cursor: pointer; padding: 10px;
+            border: 2px dashed #bdc3c7; background: #2c3e50; width: 100px; vertical-align: top;
+        }
+        .tower-option:hover { background: #34495e; border-color: var(--neon-green); }
+        .tower-icon { font-size: 2rem; display: block; margin-bottom: 5px; }
+
         /* MATTE VINDU */
         #math-modal-content {
             background: #ecf0f1; border: 4px solid #2c3e50; color: black;
             padding: 20px; text-align: center; width: 380px;
             box-shadow: 15px 15px 0 rgba(0,0,0,0.8);
         }
+        #math-header { background: #000080; color: white; margin: -20px -20px 20px -20px; padding: 10px; font-weight: bold; }
         #math-question { font-size: 2.2rem; font-weight: bold; margin: 15px 0; font-family: inherit; }
         
         input[type="text"] {
@@ -96,19 +110,21 @@
         </div>
 
         <div id="start-screen" class="overlay">
-            <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">Ny Start</span></h1>
+            <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V2.0 Utvidelse</span></h1>
             
             <div style="display:flex; gap: 20px; margin-bottom: 20px;">
                 <div style="text-align:center;">
-                    <h3 style="color:#bdc3c7; font-size:0.8rem;">VELG BRETT</h3>
+                    <h3 style="color:#bdc3c7; font-size:0.8rem;">1. VELG BRETT</h3>
                     <button class="btn" onclick="selectMap(this, 'forest')">🌲 SKOG (Lett)</button><br>
                     <button class="btn" onclick="selectMap(this, 'desert')">🌵 ØRKEN (Middels)</button><br>
                     <button class="btn" onclick="selectMap(this, 'volcano')">🌋 VULKAN (Vanskelig)</button>
                 </div>
                 <div style="text-align:center;">
-                    <h3 style="color:#bdc3c7; font-size:0.8rem;">VELG REGNEART</h3>
+                    <h3 style="color:#bdc3c7; font-size:0.8rem;">2. VELG TEMA</h3>
                     <button class="btn" onclick="setMathMode(this, 'add_sub')">PLUSS / MINUS</button><br>
                     <button class="btn" onclick="setMathMode(this, 'mult_div')">GANGE / DELE</button><br>
+                    <button class="btn" onclick="setMathMode(this, 'frac_add_sub')">BRØK (+/-)</button><br>
+                    <button class="btn" onclick="setMathMode(this, 'frac_mult_div')">BRØK (Gange/Dele)</button>
                 </div>
             </div>
             
@@ -119,13 +135,35 @@
             <div id="tower-select-menu">
                 <h3 style="margin-top:0; border-bottom: 2px solid white; padding-bottom:10px;">VELG FORSVAR</h3>
                 <div class="tower-option" onclick="selectTowerType('normal')">
-                    <span class="tower-icon">🏹</span><b>BUE</b><br><span style="color:lime">25 G</span>
+                    <span class="tower-icon">🏹</span><b>BUE</b><br><small>25 G</small>
                 </div>
                 <div class="tower-option" onclick="selectTowerType('sniper')">
-                    <span class="tower-icon">🔭</span><b>SNIPER</b><br><span style="color:lime">100 G</span>
+                    <span class="tower-icon">🔭</span><b>SNIPER</b><br><small>100 G</small>
+                </div>
+                <div class="tower-option" onclick="selectTowerType('rapid')">
+                    <span class="tower-icon">⚔️</span><b>RASK</b><br><small>150 G</small>
+                </div>
+                <div class="tower-option" onclick="selectTowerType('ice')">
+                    <span class="tower-icon">❄️</span><b>IS</b><br><small>125 G</small>
                 </div>
                 <br>
                 <button class="btn btn-red" onclick="closeTowerMenu()">AVBRYT</button>
+            </div>
+        </div>
+
+        <div id="tower-upgrade-overlay" class="overlay hidden" style="background: rgba(0,0,0,0.6);">
+            <div id="tower-upgrade-menu">
+                <h3 id="upgrade-title">TÅRN MENY</h3>
+                <p>NIVÅ: <span id="selected-tower-level">1</span></p>
+                
+                <button class="btn btn-blue" onclick="initiateUpgrade()">
+                    OPPGRADER ⬆️<br><small>PRIS: <span id="upgrade-cost">50</span> G</small>
+                </button>
+                <button class="btn btn-red" onclick="sellTower()">
+                    SELG 💸<br><small>VERDI: <span id="sell-value">12</span> G</small>
+                </button>
+                <br>
+                <button class="btn" onclick="closeUpgradeMenu()">LUKK</button>
             </div>
         </div>
 
@@ -141,6 +179,7 @@
                 <button class="btn btn-red" style="margin-top:10px; font-size: 0.8rem;" onclick="closeModal()">AVBRYT</button>
             </div>
         </div>
+
     </div>
 
 <script>
@@ -160,16 +199,24 @@
     let towers = [], enemies = []; 
     let currentPath = [];
     let pendingBuildPos = null, pendingTowerType = null;
+    let selectedTower = null; 
     let currentMathAnswer = null;
+    let currentAction = ''; // 'BUILD' or 'UPGRADE'
     let audioCtx = null;
     let waveEnemiesSpawned = 0, waveTotalEnemies = 0;
-    let mouseX = 0, mouseY = 0;
 
     // --- DATA ---
     const maps = {
         forest: { baseColor: '#2ecc71', pathColor: '#95a5a6', difficultyMult: 1.0, path: [ {x:0, y:100}, {x:700, y:100}, {x:700, y:250}, {x:100, y:250}, {x:100, y:400}, {x:700, y:400}, {x:700, y:550}, {x:800, y:550} ] },
         desert: { baseColor: '#f1c40f', pathColor: '#d35400', difficultyMult: 1.5, path: [ {x:0, y:50}, {x:100, y:50}, {x:100, y:500}, {x:250, y:500}, {x:250, y:100}, {x:400, y:100}, {x:400, y:500}, {x:550, y:500}, {x:550, y:100}, {x:700, y:100}, {x:700, y:400}, {x:800, y:400} ] },
         volcano: { baseColor: '#2c3e50', pathColor: '#333', difficultyMult: 2.0, path: [ {x:0, y:550}, {x:100, y:550}, {x:100, y:100}, {x:300, y:100}, {x:300, y:450}, {x:500, y:450}, {x:500, y:100}, {x:700, y:100}, {x:700, y:500}, {x:800, y:500} ] }
+    };
+
+    const TOWER_STATS = {
+        normal: { cost: 25, dmg: 15, range: 150, rate: 40, emoji: '🏹', upgrade: {dmg: 1.2, range: 1.1, cost_base: 50} },
+        sniper: { cost: 100, dmg: 80, range: 350, rate: 90, emoji: '🔭', upgrade: {dmg: 1.4, range: 1.15, cost_base: 100} },
+        rapid:  { cost: 150, dmg: 6, range: 120, rate: 8, emoji: '⚔️', upgrade: {dmg: 1.1, rate: 0.9, cost_base: 125} }, // Rate factor (lower is faster)
+        ice:    { cost: 125, dmg: 0, range: 150, rate: 50, emoji: '❄️', freeze_duration: 300, upgrade: {freeze_duration: 1.2, cost_base: 80} } // 300 frames = 5 seconds
     };
 
     // --- START LOGIKK ---
@@ -213,7 +260,7 @@
     function updateGame() {
         if(waveActive) frameCount++;
         
-        // Spawn Logic (Simplified for stability)
+        // --- Spawn Logic ---
         if(waveActive) {
             let enemiesToSpawn = 5 + (wave * 2);
             let spawnRate = Math.max(30, 80 - (wave * 2));
@@ -226,7 +273,6 @@
             }
             
             if (enemies.length === 0 && waveEnemiesSpawned >= enemiesToSpawn && frameCount > enemiesToSpawn * spawnRate) {
-                // Wave Complete
                 waveActive = false; 
                 wave++; 
                 document.getElementById('next-wave-container').classList.remove('hidden'); 
@@ -241,7 +287,7 @@
             if (e.finished) {
                 lives -= 1;
                 enemies.splice(i, 1);
-                if (lives <= 0) alert("GAME OVER");
+                if (lives <= 0) alert("GAME OVER"); // Simplified game over
             } else if (e.health <= 0) {
                 gold += e.reward;
                 enemies.splice(i, 1);
@@ -262,9 +308,9 @@
     }
 
     function spawnEnemy() {
-        enemies.push(new Enemy('normal')); // Simpler start - only normal enemy
+        enemies.push(new Enemy('normal'));
     }
-
+    
     // --- DRAWING ---
     function drawGame() {
         if(mapBackgroundImage) ctx.drawImage(mapBackgroundImage, 0, 0); else ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -272,10 +318,11 @@
         let mapData = maps[selectedMap]; 
         ctx.lineCap = 'round'; ctx.lineJoin = 'round'; 
         
-        // Draw Path
+        // Draw Path (Shadow)
         ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 55; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y + 5); 
         mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); ctx.stroke(); 
         
+        // Draw Path (Top)
         ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y); 
         mapData.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
         
@@ -288,13 +335,14 @@
     class Enemy {
         constructor(type) {
             this.pathIdx = 0; this.x = currentPath[0].x; this.y = currentPath[0].y;
-            this.finished = false;
-            this.baseSpeed = 1.5;
-            this.speed = this.baseSpeed;
-            this.maxHp = 30; this.health = this.maxHp;
+            this.finished = false; this.frozen = 0;
+            this.baseSpeed = 1.5; this.speed = this.baseSpeed;
+            this.maxHp = 30 + (wave * 5); this.health = this.maxHp;
             this.emoji = '👾'; this.reward = 5;
         }
         update() {
+            if (this.frozen > 0) { this.frozen--; return; }
+
             let target = currentPath[this.pathIdx + 1]; 
             if (!target) { this.finished = true; return; }
             let dx = target.x - this.x; let dy = target.y - this.y; 
@@ -315,8 +363,9 @@
         constructor(x, y, type) {
             this.x = x; this.y = y; this.type = type;
             this.level = 1; this.cooldown = 0;
-            if (type === 'normal') { this.range=150; this.dmg=15; this.rate=40; this.emoji='🏹'; } 
-            if (type === 'sniper') { this.range=350; this.dmg=80; this.rate=90; this.emoji='🔭'; }
+            const stats = TOWER_STATS[type];
+            this.dmg = stats.dmg; this.range = stats.range; this.rate = stats.rate; this.emoji = stats.emoji;
+            if (type === 'ice') this.freeze_duration = stats.freeze_duration;
         }
         update() {
             if (this.cooldown > 0) this.cooldown--;
@@ -327,8 +376,12 @@
                     if (d <= this.range && d < minDst) { minDst = d; target = e; }
                 }
                 if (target) {
-                    // Quick hit for stable code
-                    target.health -= this.dmg;
+                    if (this.type === 'ice') {
+                        target.frozen = this.freeze_duration;
+                        target.speed = target.baseSpeed; // Reset speed after freeze
+                    } else {
+                        target.health -= this.dmg;
+                    }
                     this.cooldown = this.rate;
                 }
             }
@@ -337,10 +390,12 @@
             ctx.fillStyle = '#7f8c8d'; ctx.fillRect(this.x - 15, this.y - 15, 30, 30);
             ctx.font = '24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(this.emoji, this.x, this.y);
+            ctx.fillStyle = 'yellow'; ctx.font = '10px Courier New';
+            ctx.fillText("Lvl " + this.level, this.x + 15, this.y + 15);
         }
     }
-
-    // --- MENY OG UI ---
+    
+    // --- MENY OG UI FUNKSJONER ---
     function updateUI() {
         document.getElementById('lives-display').innerText = lives;
         document.getElementById('wave-display').innerText = wave;
@@ -372,32 +427,125 @@
         document.getElementById('next-wave-container').classList.add('hidden');
     }
 
+    // Bygg Tårn Prosess
+    document.getElementById('gameCanvas').addEventListener('mousedown', function(e) {
+        if (gameState !== 'PLAYING') return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+
+        // 1. Sjekk for klikk på eksisterende tårn (for oppgradering)
+        let clickedTower = towers.find(t => Math.hypot(t.x - mx, t.y - my) < 30);
+
+        if (clickedTower) {
+            selectedTower = clickedTower;
+            openUpgradeMenu();
+            return;
+        }
+
+        // 2. Klikk for å bygge nytt tårn
+        pendingBuildPos = {x: mx, y: my};
+        document.getElementById('tower-select-overlay').classList.remove('hidden');
+    });
+
     function selectTowerType(type) {
-        let cost = (type === 'normal') ? 25 : 100;
-        if (gold < cost) { alert("TRENGER MER GULL!"); return; }
+        const cost = TOWER_STATS[type].cost;
+        if (gold < cost) { alert("TRENGER MER GULL! (" + cost + " G)"); return; }
         pendingTowerType = type; 
+        currentAction = 'BUILD';
         closeTowerMenu(); 
-        openMathModal("BYGG TÅRN");
+        openMathModal("BYGG " + type.toUpperCase());
+    }
+
+    // Oppgrader Tårn Prosess
+    function openUpgradeMenu() {
+        const stats = TOWER_STATS[selectedTower.type];
+        const cost = selectedTower.level * stats.upgrade.cost_base;
+        const sellValue = Math.floor((stats.cost + ((selectedTower.level - 1) * stats.upgrade.cost_base)) / 2);
+
+        document.getElementById('selected-tower-level').innerText = selectedTower.level;
+        document.getElementById('upgrade-cost').innerText = cost;
+        document.getElementById('sell-value').innerText = sellValue;
+        document.getElementById('upgrade-title').innerText = selectedTower.type.toUpperCase() + " TÅRN";
+        
+        document.getElementById('tower-upgrade-overlay').classList.remove('hidden');
+    }
+
+    function initiateUpgrade() {
+        const stats = TOWER_STATS[selectedTower.type];
+        const cost = selectedTower.level * stats.upgrade.cost_base;
+        if (gold < cost) { alert("TRENGER MER GULL! (" + cost + " G)"); return; }
+
+        currentAction = 'UPGRADE';
+        closeUpgradeMenu();
+        openMathModal("OPPGRADER TÅRN");
+    }
+
+    function sellTower() {
+        const sellValue = parseInt(document.getElementById('sell-value').innerText);
+        gold += sellValue;
+        const index = towers.indexOf(selectedTower);
+        if (index > -1) {
+            towers.splice(index, 1);
+        }
+        closeUpgradeMenu();
     }
 
     function closeTowerMenu() { document.getElementById('tower-select-overlay').classList.add('hidden'); }
-    
-    // --- MATTE MODAL ---
+    function closeUpgradeMenu() { document.getElementById('tower-upgrade-overlay').classList.add('hidden'); }
+
+    // --- MATTE MODAL FUNKSJONER ---
+    function performAction() {
+        if (currentAction === 'BUILD') {
+            const stats = TOWER_STATS[pendingTowerType];
+            const t = new Tower(pendingBuildPos.x, pendingBuildPos.y, pendingTowerType);
+            towers.push(t);
+            gold -= stats.cost;
+        } else if (currentAction === 'UPGRADE') {
+            const t = selectedTower;
+            const stats = TOWER_STATS[t.type];
+            const cost = t.level * stats.upgrade.cost_base;
+            
+            // Apply upgrade stats
+            t.level++;
+            gold -= cost;
+            
+            if (t.type === 'ice') {
+                t.freeze_duration = Math.round(t.freeze_duration * stats.upgrade.freeze_duration);
+            } else if (stats.upgrade.rate) {
+                t.rate = Math.round(t.rate * stats.upgrade.rate);
+                t.dmg = Math.round(t.dmg * stats.upgrade.dmg);
+            } else {
+                t.dmg = Math.round(t.dmg * stats.upgrade.dmg);
+                t.range = Math.round(t.range * stats.upgrade.range);
+            }
+        }
+    }
+
     function generateQuestion() {
         const r = (max) => Math.floor(Math.random() * max) + 1;
-        let diffFactor = 1; // Simplest difficulty for V1.0
-
+        let diffFactor = maps[selectedMap].difficultyMult + (wave * 0.5); 
         let q, a;
+        
         if(mathMode==='add_sub'){ 
-            let range = 10 + (diffFactor * 5); 
+            let range = 20 + Math.floor(diffFactor * 5); 
             let n1=r(range), n2=r(range); 
             if(Math.random()>0.5){q=`${n1} + ${n2}`;a=n1+n2}
             else{if(n1<n2)[n1,n2]=[n2,n1];q=`${n1} - ${n2}`;a=n1-n2}
         }
         else if(mathMode==='mult_div'){ 
-            let range = 5 + Math.ceil(diffFactor/2); 
+            let range = Math.min(12, 5 + Math.ceil(diffFactor/2)); 
             let n1=r(range)+1, n2=r(range)+1; 
-            q=`${n1} × ${n2}`;a=n1*n2; // Bare gange for enkelthet
+            if(Math.random()>0.5){q=`${n1} × ${n2}`;a=n1*n2}
+            else{let p=n1*n2;q=`${p} : ${n1}`;a=n2}
+        }
+        else if(mathMode==='frac_add_sub'){ 
+            let d= (r(3)+2)*2, n1=r(d-1), n2=r(d-1); 
+            if(Math.random()>0.5){q=`${n1}/${d} + ${n2}/${d}`;a=`${n1+n2}/${d}`}
+            else{if(n1<n2)[n1,n2]=[n2,n1];q=`${n1}/${d} - ${n2}/${d}`;a=`${n1-n2}/${d}`}} 
+        else if(mathMode==='frac_mult_div'){ 
+            let range = 3 + Math.floor(diffFactor/3);
+            let n1=r(range),d1=r(range)+1,n2=r(range),d2=r(range)+1; 
+            q=`${n1}/${d1} × ${n2}/${d2}`; a=`${n1*n2}/${d1*d2}`; 
         }
         return {question:q, answer:a};
     }
@@ -405,12 +553,25 @@
     function checkAnswer() {
         const input = document.getElementById('math-answer');
         const userVal = input.value.trim();
-        let isCorrect = (parseInt(userVal) === parseInt(currentMathAnswer));
+        let isCorrect = false;
+        
+        // Complex fractional check needed
+        if (String(currentMathAnswer).includes('/')) {
+             if (!userVal.includes('/')) { 
+                 // Try parsing simple answer against fractional target
+                 isCorrect = (parseFloat(userVal) == eval(currentMathAnswer)); 
+             } else { 
+                 // Cross-multiply fractional answers for correctness
+                 const [uN, uD] = userVal.split('/').map(Number); 
+                 const [cN, cD] = currentMathAnswer.split('/').map(Number); 
+                 if (uD && cD && (uN * cD === cN * uD)) isCorrect = true; 
+             }
+        } else { 
+            if (parseInt(userVal) === parseInt(currentMathAnswer)) isCorrect = true; 
+        }
 
         if (isCorrect) {
-            gold -= (pendingTowerType === 'normal' ? 25 : 100);
-            let t = new Tower(pendingBuildPos.x, pendingBuildPos.y, pendingTowerType);
-            towers.push(t);
+            performAction();
             closeModal();
         } else {
             input.style.borderColor = 'red';
@@ -424,9 +585,11 @@
         document.getElementById('math-overlay').classList.remove('hidden'); 
         document.getElementById('math-header').innerText = title; 
         document.getElementById('math-feedback').innerText = ""; 
+        
         let qa = generateQuestion(); 
         document.getElementById('math-question').innerText = qa.question; 
         currentMathAnswer = qa.answer; 
+        
         let input = document.getElementById('math-answer'); 
         input.value = ''; 
         input.focus(); 
@@ -440,16 +603,6 @@
 
     // --- LYD ---
     function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-
-    document.getElementById('gameCanvas').addEventListener('mousedown', function(e) {
-        if (gameState !== 'PLAYING') return;
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-
-        // Simplified check: if not clicking near existing tower, open build menu.
-        pendingBuildPos = {x: mx, y: my};
-        document.getElementById('tower-select-overlay').classList.remove('hidden');
-    });
 
     document.getElementById('math-answer').addEventListener("keypress", function(e) { if (e.key === "Enter") checkAnswer(); });
 
