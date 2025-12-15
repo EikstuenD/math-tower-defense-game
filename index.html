@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matte-Forsvarerne 21.0</title>
+    <title>Matte-Forsvarerne 22.0</title>
     <style>
         :root {
             --bg-color: #202028;
@@ -23,7 +23,7 @@
             height: 100vh; overflow: hidden; user-select: none;
         }
 
-        /* UI BAR */
+        /* UI LAYOUT */
         #ui-bar {
             width: 100%; background-color: #000; border-bottom: 4px solid var(--retro-gray);
             padding: 10px 20px; display: flex; justify-content: space-between; align-items: center;
@@ -510,7 +510,15 @@
     }
 
     class Enemy {
-        constructor(type) { this.pathIdx = 0; this.x = currentPath[0].x; this.y = currentPath[0].y; this.type = type; this.finished = false; let hpMult = 1 + (wave * 0.8); if (type === 'normal') { this.baseSpeed=1.5; this.maxHp=30*hpMult; this.emoji='👾'; this.reward=5; this.damage=1; this.color='#8e44ad'; } if (type === 'fast')   { this.baseSpeed=3.0; this.maxHp=15*hpMult; this.emoji='🦇'; this.reward=8; this.damage=1; this.color='#e67e22'; } if (type === 'tank')   { this.baseSpeed=0.8; this.maxHp=80*hpMult; this.emoji='🐗'; this.reward=15; this.damage=2; this.color='#2c3e50'; } if (type === 'boss')   { this.baseSpeed=0.5; this.maxHp=500*hpMult; this.emoji='👹'; this.reward=250; this.damage=10; this.color='#c0392b'; } this.speed = this.baseSpeed; this.health = this.maxHp; }
+        constructor(type) { 
+            this.pathIdx = 0; this.x = currentPath[0].x; this.y = currentPath[0].y; this.type = type; this.finished = false;
+            let hpMult = 1 + (wave * 0.8); 
+            if (type === 'normal') { this.baseSpeed=1.5; this.maxHp=30*hpMult; this.emoji='👾'; this.reward=5; this.damage=1; this.color='#8e44ad'; } 
+            if (type === 'fast')   { this.baseSpeed=3.0; this.maxHp=15*hpMult; this.emoji='🦇'; this.reward=8; this.damage=1; this.color='#e67e22'; } 
+            if (type === 'tank')   { this.baseSpeed=0.8; this.maxHp=80*hpMult; this.emoji='🐗'; this.reward=15; this.damage=2; this.color='#2c3e50'; } 
+            if (type === 'boss')   { this.baseSpeed=0.5; this.maxHp=500*hpMult; this.emoji='👹'; this.reward=250; this.damage=10; this.color='#c0392b'; } 
+            this.speed = this.baseSpeed; this.health = this.maxHp; 
+        }
         update() { let target = currentPath[this.pathIdx + 1]; if (!target) { this.finished = true; return; } let dx = target.x - this.x; let dy = target.y - this.y; let dist = Math.hypot(dx, dy); if (dist < this.speed) { this.x = target.x; this.y = target.y; this.pathIdx++; } else { this.x += (dx/dist)*this.speed; this.y += (dy/dist)*this.speed; } }
         draw() { let size = (this.type === 'boss') ? '60px' : '24px'; ctx.font = size + ' Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; if(freezeTimer > 0) { ctx.fillStyle = 'cyan'; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(this.x, this.y, 20, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; } ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(this.emoji, this.x+2, this.y+2); ctx.fillStyle = '#fff'; ctx.fillText(this.emoji, this.x, this.y); let hpPct = this.health / this.maxHp; ctx.fillStyle = 'red'; ctx.fillRect(this.x - 10, this.y - 20, 20, 4); ctx.fillStyle = '#39ff14'; ctx.fillRect(this.x - 10, this.y - 20, 20 * hpPct, 4); }
     }
@@ -529,7 +537,7 @@
     function openAchievements() { let list = document.getElementById('achieve-list'); list.innerHTML = ''; achievements.forEach(a => { let unlocked = unlockedAchievements.includes(a.id); list.innerHTML += `<div class="achieve-item ${unlocked?'achieve-unlocked':''}"><div class="achieve-icon">${unlocked?'🏆':'🔒'}</div><b>${a.name}</b><br><small>${a.desc}</small></div>`; }); document.getElementById('achieve-modal').classList.remove('hidden'); }
     function closeAchievements() { document.getElementById('achieve-modal').classList.add('hidden'); }
     function updateUI() { document.getElementById('lives-display').innerText = lives; document.getElementById('wave-display').innerText = wave; document.getElementById('gold-display').innerText = Math.floor(gold); document.getElementById('gems-display').innerText = gems; document.getElementById('mana-display').innerText = mana; document.getElementById('stat-shots').innerText = statsShots; document.getElementById('stat-kills').innerText = statsKills; let acc = statsShots > 0 ? Math.round((statsKills / statsShots) * 100) : 100; if(acc > 100) acc = 100; document.getElementById('stat-accuracy').innerText = acc + "%"; document.getElementById('combo-count').innerText = comboStreak; const comboBox = document.getElementById('combo-box'); if(comboStreak >= 3) { comboBox.classList.add('combo-active'); document.getElementById('combo-msg').innerText = "🔥 COMBO BONUS! 🔥"; } else { comboBox.classList.remove('combo-active'); document.getElementById('combo-msg').innerText = ""; } }
-    function updateStatsUI() { updateUI(); } // Alias fix
+    function updateStatsUI() { updateUI(); } 
     function closeTowerMenu() { document.getElementById('tower-select-overlay').classList.add('hidden'); }
     function closeUpgradeMenu() { document.getElementById('tower-upgrade-overlay').classList.add('hidden'); }
     function openUpgradeMenu() { let t = selectedTower; document.getElementById('upgrade-title').innerText = (['spikes','glue','bomb'].includes(t.type)) ? "FELLE MENY" : ((t.type==='mine') ? "GRUVE MENY" : "TÅRN MENY"); document.getElementById('upgrade-info').innerText = "NIVÅ: " + t.level; let upCost = (t.type === 'mine') ? Math.floor(200 * Math.pow(1.5, t.level)) : 50 * t.level; let sellVal = (t.type === 'mine') ? Math.floor(200/2) : Math.floor(50/2); document.getElementById('upgrade-cost').innerText = upCost; document.getElementById('sell-value').innerText = Math.floor(upCost/2); const gemBtn = document.getElementById('btn-insert-gem'); if (t.type !== 'mine' && !['spikes','glue','bomb'].includes(t.type) && !t.hasGem && gems > 0) gemBtn.classList.remove('hidden'); else gemBtn.classList.add('hidden'); document.getElementById('tower-upgrade-overlay').classList.remove('hidden'); }
@@ -553,7 +561,7 @@
             ctx.strokeStyle = grad; ctx.beginPath(); for(let i=100; i<600; i+=150) { ctx.moveTo(0, i + Math.sin(lavaOffset/10 + i)*20); ctx.bezierCurveTo(200, i-50, 600, i+50, 800, i + Math.cos(lavaOffset/10 + i)*30); } ctx.stroke(); ctx.globalCompositeOperation = 'source-over';
         }
         let mapData = maps[selectedMap]; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 55; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y + 5); 
-        mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); // Fikset her (var oCtx før)
+        mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); 
         ctx.stroke(); 
         ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y); mapData.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
         let end = currentPath[currentPath.length-1]; ctx.font = '40px Arial'; ctx.fillText("🏰", end.x, end.y - 10);
