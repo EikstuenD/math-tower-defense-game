@@ -1,0 +1,641 @@
+/* Version: #1 */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- STATE ---
+let gameState = 'MENU';
+let mathMode = null;
+let selectedMap = null;
+let lives = 20, wave = 1, gold = 100, gems = 0;
+let frameCount = 0;
+let waveActive = false;
+let speedMultiplier = 1;
+
+// Entities
+let mapBackgroundImage = null;
+let towers = [], enemies = [], projectiles = [], floatingTexts = []; 
+let currentPath = [];
+let pendingBuildPos = null, pendingTowerType = null;
+let selectedTower = null; 
+let currentMathAnswer = null;
+let currentAction = ''; // 'BUILD', 'UPGRADE', 'GEM'
+let audioCtx = null;
+let waveEnemiesSpawned = 0, waveTotalEnemies = 0;
+
+// --- DATA ---
+const maps = {
+    forest: { baseColor: '#2ecc71', pathColor: '#95a5a6', difficultyMult: 1.0, path: [ {x:0, y:100}, {x:700, y:100}, {x:700, y:250}, {x:100, y:250}, {x:100, y:400}, {x:700, y:400}, {x:700, y:550}, {x:800, y:550} ] },
+    desert: { baseColor: '#f1c40f', pathColor: '#d35400', difficultyMult: 1.5, path: [ {x:0, y:50}, {x:100, y:50}, {x:100, y:500}, {x:250, y:500}, {x:250, y:100}, {x:400, y:100}, {x:400, y:500}, {x:550, y:500}, {x:550, y:100}, {x:700, y:100}, {x:700, y:400}, {x:800, y:400} ] },
+    volcano: { baseColor: '#2c3e50', pathColor: '#333', difficultyMult: 2.0, path: [ {x:0, y:550}, {x:100, y:550}, {x:100, y:100}, {x:300, y:100}, {x:300, y:450}, {x:500, y:450}, {x:500, y:100}, {x:700, y:100}, {x:700, y:500}, {x:800, y:500} ] }
+};
+
+const TOWER_STATS = {
+    normal: { cost: 25, dmg: 15, range: 150, rate: 40, emoji: '🏹', upgrade: {dmg: 1.2, range: 1.1, cost_base: 50} },
+    sniper: { cost: 100, dmg: 65, range: 350, rate: 90, emoji: '🔭', upgrade: {dmg: 1.35, range: 1.1, cost_base: 100} }, // DMG reduced from 80 to 65
+    rapid:  { cost: 150, dmg: 6, range: 120, rate: 8, emoji: '⚔️', upgrade: {dmg: 1.1, rate_mult: 0.9, cost_base: 125} },
+    ice:    { cost: 125, dmg: 0, range: 150, rate: 50, emoji: '❄️', freeze_duration: 300, upgrade: {freeze_duration_mult: 1.2, cost_base: 80} },
+    mine:   { cost: 200, dmg: 0, range: 0, rate: 300, emoji: '⛏️', base_income: 10, upgrade: {income_add: 5, cost_base: 150} } // rate 300 = 5 seconds
+};
+
+// --- START LOGIKK ---
+
+function generateMapTexture(mapData) {
+    const offCanvas = document.createElement('canvas'); offCanvas.width = 800; offCanvas.height = 600; const oCtx = offCanvas.getContext('2d');
+    oCtx.fillStyle = mapData.baseColor; oCtx.fillRect(0, 0, 800, 600);
+    return offCanvas;
+}
+
+function initGame() {
+    if (!selectedMap || !mathMode) return;
+    try {
+        lives = 20; gold = 100; gems = 0; wave = 1; frameCount = 0;
+        towers = []; enemies = []; projectiles = []; floatingTexts = [];
+        currentPath = maps[selectedMap].path; 
+        mapBackgroundImage = generateMapTexture(maps[selectedMap]);
+        
+        gameState = 'PLAYING'; 
+        waveActive = false; 
+        speedMultiplier = 1;
+        
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('next-wave-container').classList.remove('hidden');
+        document.getElementById('next-wave-num').innerText = wave;
+        
+        updateUI();
+        initAudio(); 
+        gameLoop();
+    } catch(e) {
+        alert("Feil ved oppstart: " + e.message);
+    }
+}
+
+function gameLoop() {
+    if (gameState !== 'PLAYING') return;
+    
+    for(let i=0; i<speedMultiplier; i++) {
+        updateGame();
+    }
+    
+    drawGame();
+    requestAnimationFrame(gameLoop);
+}
+
+function updateGame() {
+    if(waveActive) frameCount++;
+    
+    // --- Passive Income Check ---
+    if (waveActive && frameCount % (300 / speedMultiplier) === 0) {
+        towers.filter(t => t.type === 'mine').forEach(mine => {
+            gold += mine.income;
+            if (Math.random() < 0.10) { gems += 1; }
+        });
+    }
+
+    // --- Boss Paralyze Check (Every 4 seconds if Boss is present) ---
+    const bossPresent = enemies.some(e => e.type === 'boss');
+    if (bossPresent && frameCount % (240 / speedMultiplier) === 0) {
+        paralyzeTowers();
+    }
+
+
+    // --- Spawn Logic ---
+    if(waveActive) {
+        let enemiesToSpawn = 5 + (wave * 2);
+        if (wave % 5 === 0) enemiesToSpawn += 1; 
+
+        let spawnRate = Math.max(30, 80 - (wave * 2));
+        
+        if (waveEnemiesSpawned < enemiesToSpawn) { 
+            if (frameCount % spawnRate === 0) { 
+                spawnEnemy(); 
+                waveEnemiesSpawned++; 
+            } 
+        }
+        
+        // Critical check for end of wave
+        if (enemies.length === 0 && waveEnemiesSpawned >= enemiesToSpawn) {
+            waveActive = false; 
+            wave++; 
+            // Reset spawn tracking for next wave
+            waveEnemiesSpawned = 0;
+            frameCount = 0;
+            
+            document.getElementById('next-wave-container').classList.remove('hidden'); 
+            document.getElementById('next-wave-num').innerText = wave;
+            speedMultiplier = 1; 
+            updateSpeedBtn();
+        }
+    }
+
+    // Enemy movement & damage
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        e.update();
+        if (e.finished) {
+            lives -= 1;
+            enemies.splice(i, 1);
+            if (lives <= 0) alert("GAME OVER"); 
+        } else if (e.health <= 0) {
+            gold += e.reward;
+            enemies.splice(i, 1);
+        }
+    }
+    
+    // Projectile movement and collision
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        let p = projectiles[i];
+        p.update();
+        if (p.active === false) {
+            projectiles.splice(i, 1);
+        }
+    }
+
+    // Tower fire logic
+    towers.forEach(t => t.update());
+    
+    // Floating text update
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        floatingTexts[i].update();
+        if (floatingTexts[i].life <= 0) {
+            floatingTexts.splice(i, 1);
+        }
+    }
+
+    updateUI();
+}
+
+function startNextWave() {
+    waveActive = true;
+    waveEnemiesSpawned = 0;
+    frameCount = 0;
+    document.getElementById('next-wave-container').classList.add('hidden');
+}
+
+function spawnEnemy() {
+    let type = 'normal';
+    
+    if (wave % 5 === 0 && waveEnemiesSpawned === (5 + (wave * 2))) {
+            type = 'boss';
+    } else {
+        let r = Math.random();
+        if (r < 0.25) type = 'tank';
+        else if (r < 0.50) type = 'rapid'; 
+    }
+    enemies.push(new Enemy(type));
+}
+
+function paralyzeTowers() {
+    towers.forEach(t => t.paralyzed = 0);
+
+    const activeTowers = towers.filter(t => t.type !== 'ice' && t.type !== 'mine');
+    const numToParalyze = Math.floor(activeTowers.length / 2);
+
+    const shuffled = activeTowers.sort(() => 0.5 - Math.random());
+    shuffled.slice(0, numToParalyze).forEach(t => {
+        t.paralyzed = 180; // 3 seconds
+    });
+}
+
+// Toggle speed function
+function toggleSpeed() {
+    if (speedMultiplier === 1) {
+        speedMultiplier = 3;
+    } else {
+        speedMultiplier = 1;
+    }
+    updateSpeedBtn();
+}
+
+function updateSpeedBtn() {
+    const btn = document.getElementById('speed-btn');
+    btn.innerText = `⏩ ${speedMultiplier}x`;
+    if (speedMultiplier === 3) {
+        btn.classList.add('btn-speed-active');
+    } else {
+        btn.classList.remove('btn-speed-active');
+    }
+}
+
+
+// --- DRAWING ---
+function drawGame() {
+    if(mapBackgroundImage) ctx.drawImage(mapBackgroundImage, 0, 0); else ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    let mapData = maps[selectedMap]; 
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; 
+    
+    // Draw Path (Shadow)
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 55; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y + 5); 
+    mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); ctx.stroke(); 
+    
+    // Draw Path (Top)
+    ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y); 
+    mapData.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
+    
+    // Draw Towers, Enemies and Projectiles
+    towers.forEach(t => t.draw());
+    enemies.forEach(e => e.draw());
+    projectiles.forEach(p => p.draw());
+    
+    // Draw Floating Text (Damage numbers)
+    ctx.font = 'bold 14px Arial';
+    floatingTexts.forEach(t => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${t.life / 30})`;
+        ctx.fillText(t.text, t.x, t.y);
+    });
+}
+
+// --- KLASSER ---
+class Enemy {
+    constructor(type) {
+        this.pathIdx = 0; this.x = currentPath[0].x; this.y = currentPath[0].y;
+        this.type = type; this.finished = false; this.frozen = 0;
+        
+        // Stats scaling
+        const HP_SCALE = 1 + (wave * 0.15); // 15% HP per wave
+        const SPEED_SCALE = 1 + (wave * 0.05); // 5% Speed per wave
+        
+        if (type === 'normal') { this.baseSpeed=1.5 * SPEED_SCALE; this.maxHp=30*HP_SCALE; this.emoji='👾'; this.reward=5; }
+        if (type === 'tank')   { this.baseSpeed=0.8 * SPEED_SCALE; this.maxHp=100*HP_SCALE; this.emoji='🐗'; this.reward=15; }
+        if (type === 'rapid')  { this.baseSpeed=3.0 * SPEED_SCALE; this.maxHp=15*HP_SCALE; this.emoji='🦇'; this.reward=8; }
+        if (type === 'boss')   { this.baseSpeed=0.6 * SPEED_SCALE; this.maxHp=300*HP_SCALE; this.emoji='👹'; this.reward=50; }
+        
+        this.speed = this.baseSpeed;
+        this.health = this.maxHp;
+    }
+    update() {
+        if (this.frozen > 0) { 
+            this.frozen--; 
+            this.speed = 0; 
+            return; 
+        }
+        this.speed = this.baseSpeed; 
+        
+        let target = currentPath[this.pathIdx + 1]; 
+        if (!target) { this.finished = true; return; }
+        let dx = target.x - this.x; let dy = target.y - this.y; 
+        let dist = Math.hypot(dx, dy); 
+        if (dist < this.speed) { this.x = target.x; this.y = target.y; this.pathIdx++; } 
+        else { this.x += (dx/dist)*this.speed; this.y += (dy/dist)*this.speed; }
+    }
+    draw() {
+        if (this.frozen > 0) {
+            ctx.fillStyle = 'rgba(0, 191, 255, 0.4)'; 
+            ctx.beginPath(); ctx.arc(this.x, this.y, 15, 0, Math.PI * 2); ctx.fill();
+        }
+        
+        ctx.font = (this.type === 'boss') ? '36px Arial' : '24px Arial';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff'; ctx.fillText(this.emoji, this.x, this.y);
+        
+        // Health Bar
+        let hpPct = this.health / this.maxHp;
+        ctx.fillStyle = 'red'; ctx.fillRect(this.x - 10, this.y - 20, 20, 4);
+        ctx.fillStyle = 'lime'; ctx.fillRect(this.x - 10, this.y - 20, 20 * hpPct, 4);
+    }
+}
+
+class Tower {
+    constructor(x, y, type) {
+        this.x = x; this.y = y; this.type = type;
+        this.level = 1; this.cooldown = 0; this.paralyzed = 0;
+        this.hasGem = false; 
+        const stats = TOWER_STATS[type];
+        this.dmg = stats.dmg; this.range = stats.range; this.rate = stats.rate; this.emoji = stats.emoji;
+        
+        if (type === 'ice') this.freeze_duration = stats.freeze_duration;
+        if (type === 'mine') this.income = stats.base_income;
+    }
+    update() {
+        if (this.paralyzed > 0) { this.paralyzed--; return; } 
+        if(this.type === 'mine') return; 
+
+        if (this.cooldown > 0) this.cooldown--;
+        if (this.cooldown <= 0) {
+            let target = null, minDst = Infinity;
+            for (let e of enemies) {
+                let d = Math.hypot(e.x - this.x, e.y - this.y);
+                if (d <= this.range && d < minDst) { minDst = d; target = e; }
+            }
+            if (target) {
+                projectiles.push(new Projectile(this.x, this.y, target, this.type, this.dmg * (this.hasGem ? 1.5 : 1), this.freeze_duration));
+                this.cooldown = this.rate;
+            }
+        }
+    }
+    draw() {
+        ctx.fillStyle = this.paralyzed > 0 ? '#444' : (this.type === 'mine' ? '#f1c40f' : '#7f8c8d');
+        ctx.fillRect(this.x - 15, this.y - 15, 30, 30);
+        ctx.font = '24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(this.emoji, this.x, this.y);
+        
+        if (this.hasGem) {
+            ctx.fillStyle = 'purple';
+            ctx.beginPath();
+            ctx.arc(this.x + 10, this.y - 10, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.fillStyle = 'yellow'; ctx.font = '10px Courier New';
+        ctx.fillText("Lvl " + this.level, this.x + 15, this.y + 15);
+        
+        if(this.type === 'mine') {
+            ctx.fillStyle = 'white'; 
+            ctx.font = '8px Courier New';
+            ctx.fillText(`+${this.income} G`, this.x, this.y + 15);
+        }
+    }
+}
+
+class Projectile {
+    constructor(x, y, target, type, dmg, freeze_duration = 0) {
+        this.x = x; this.y = y; this.target = target; this.type = type; this.dmg = dmg;
+        this.speed = 15; 
+        this.active = true;
+        this.freeze_duration = freeze_duration;
+    }
+    update() {
+        if (!this.target || this.target.health <= 0) { this.active = false; return; }
+        
+        let dx = this.target.x - this.x, dy = this.target.y - this.y;
+        let dist = Math.hypot(dx, dy);
+        
+        if (dist < this.speed) {
+            this.active = false;
+            if (this.type === 'ice') {
+                this.target.frozen = this.freeze_duration;
+            } else {
+                this.target.health -= this.dmg;
+                floatingTexts.push(new FloatingText(this.target.x, this.target.y, Math.round(this.dmg)));
+            }
+        } else { 
+            this.x += (dx/dist)*this.speed; 
+            this.y += (dy/dist)*this.speed; 
+        }
+    }
+    draw() {
+        ctx.fillStyle = (this.type === 'ice') ? '#00ffff' : '#ffff00';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class FloatingText {
+    constructor(x, y, text) {
+        this.x = x;
+        this.y = y - 10;
+        this.text = "-" + text;
+        this.life = 30; 
+        this.vy = -1; 
+    }
+    update() {
+        this.y += this.vy;
+        this.life--;
+    }
+}
+
+
+// --- MENY OG UI FUNKSJONER ---
+function updateUI() {
+    document.getElementById('lives-display').innerText = lives;
+    document.getElementById('wave-display').innerText = wave;
+    document.getElementById('gold-display').innerText = gold;
+    document.getElementById('gems-display').innerText = gems;
+}
+
+function selectMap(btn, mapName) { 
+    selectedMap = mapName; 
+    [...btn.parentElement.children].forEach(c => {if(c.tagName==='BUTTON') c.classList.remove('selected-btn')}); 
+    btn.classList.add('selected-btn'); 
+    checkStartReady(); 
+}
+
+function setMathMode(btn, mode) { 
+    mathMode = mode; 
+    [...btn.parentElement.children].forEach(c => {if(c.tagName==='BUTTON') c.classList.remove('selected-btn')}); 
+    btn.classList.add('selected-btn'); 
+    checkStartReady(); 
+}
+
+function checkStartReady() { 
+    document.getElementById('start-btn').disabled = !(selectedMap && mathMode); 
+}
+
+function backToMenu() {
+    if(!confirm("Avslutte til meny?")) return;
+    gameState = 'MENU';
+    document.getElementById('start-screen').classList.remove('hidden');
+    document.getElementById('next-wave-container').classList.add('hidden');
+}
+
+// Bygg Tårn Prosess
+document.getElementById('gameCanvas').addEventListener('mousedown', function(e) {
+    if (gameState !== 'PLAYING') return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+
+    let clickedTower = towers.find(t => Math.hypot(t.x - mx, t.y - my) < 30);
+
+    if (clickedTower) {
+        selectedTower = clickedTower;
+        openUpgradeMenu();
+        return;
+    }
+
+    pendingBuildPos = {x: mx, y: my};
+    document.getElementById('tower-select-overlay').classList.remove('hidden');
+});
+
+function selectTowerType(type) {
+    const cost = TOWER_STATS[type].cost;
+    if (gold < cost) { alert("TRENGER MER GULL! (" + cost + " G)"); return; }
+    pendingTowerType = type; 
+    currentAction = 'BUILD';
+    closeTowerMenu(); 
+    openMathModal("BYGG " + (type === 'mine' ? 'GRUVE' : type.toUpperCase()));
+}
+
+// Oppgrader Tårn Prosess
+function openUpgradeMenu() {
+    const stats = TOWER_STATS[selectedTower.type];
+    const base_cost = stats.cost;
+    
+    let cost;
+    
+    if (selectedTower.type === 'mine') {
+        cost = selectedTower.level * stats.upgrade.cost_base;
+        document.getElementById('mine-income-display').style.display = 'block';
+        document.getElementById('mine-income-value').innerText = selectedTower.income;
+    } else {
+        cost = selectedTower.level * stats.upgrade.cost_base;
+        document.getElementById('mine-income-display').style.display = 'none';
+    }
+
+    const sellValue = Math.floor((base_cost + ((selectedTower.level - 1) * cost)) / 2); // Approximation
+
+    document.getElementById('selected-tower-level').innerText = selectedTower.level;
+    document.getElementById('upgrade-cost').innerText = cost;
+    document.getElementById('sell-value').innerText = sellValue;
+    document.getElementById('upgrade-title').innerText = selectedTower.type.toUpperCase() + (selectedTower.type === 'mine' ? '' : ' TÅRN');
+    
+    // Gem button logic
+    const gemBtn = document.getElementById('btn-insert-gem');
+    if (selectedTower.type !== 'mine' && selectedTower.hasGem !== true && gems > 0) {
+        gemBtn.classList.remove('hidden');
+    } else {
+        gemBtn.classList.add('hidden');
+    }
+
+
+    document.getElementById('tower-upgrade-overlay').classList.remove('hidden');
+}
+
+function initiateUpgrade() {
+    const stats = TOWER_STATS[selectedTower.type];
+    let cost = selectedTower.level * stats.upgrade.cost_base;
+
+    if (gold < cost) { alert("TRENGER MER GULL! (" + cost + " G)"); return; }
+
+    currentAction = 'UPGRADE';
+    closeUpgradeMenu();
+    openMathModal("OPPGRADER " + selectedTower.type.toUpperCase());
+}
+
+function initiateGem() {
+    if (gems < 1) return;
+    currentAction = 'GEM';
+    closeUpgradeMenu();
+    openMathModal("FORSTERK TÅRN");
+}
+
+
+function sellTower() {
+    const sellValue = parseInt(document.getElementById('sell-value').innerText);
+    gold += sellValue;
+    const index = towers.indexOf(selectedTower);
+    if (index > -1) {
+        towers.splice(index, 1);
+    }
+    closeUpgradeMenu();
+}
+
+function closeTowerMenu() { document.getElementById('tower-select-overlay').classList.add('hidden'); }
+function closeUpgradeMenu() { document.getElementById('tower-upgrade-overlay').classList.add('hidden'); }
+
+// --- MATTE MODAL FUNKSJONER ---
+function performAction() {
+    if (currentAction === 'BUILD') {
+        const stats = TOWER_STATS[pendingTowerType];
+        const t = new Tower(pendingBuildPos.x, pendingBuildPos.y, pendingTowerType);
+        towers.push(t);
+        gold -= stats.cost;
+    } else if (currentAction === 'UPGRADE') {
+        const t = selectedTower;
+        const stats = TOWER_STATS[t.type];
+        let cost = t.level * stats.upgrade.cost_base;
+        
+        t.level++;
+        gold -= cost;
+        
+        if (t.type === 'mine') {
+            t.income += stats.upgrade.income_add;
+        } else if (t.type === 'ice') {
+            t.freeze_duration = Math.round(t.freeze_duration * stats.upgrade.freeze_duration_mult);
+        } else if (t.type === 'rapid') {
+            t.rate = Math.round(t.rate * stats.upgrade.rate_mult);
+            t.dmg = Math.round(t.dmg * stats.upgrade.dmg);
+        } else {
+            t.dmg = Math.round(t.dmg * stats.upgrade.dmg);
+            t.range = Math.round(t.range * stats.upgrade.range);
+        }
+    } else if (currentAction === 'GEM') {
+        selectedTower.hasGem = true;
+        selectedTower.dmg = Math.round(selectedTower.dmg * 1.5); 
+        gems -= 1;
+    }
+}
+
+function generateQuestion() {
+    const r = (max) => Math.floor(Math.random() * max) + 1;
+    let diffFactor = maps[selectedMap].difficultyMult + (wave * 0.5); 
+    
+    let q, a;
+    
+    if(mathMode==='add_sub'){ 
+        let range = 20 + Math.floor(diffFactor * 5); 
+        let n1=r(range), n2=r(range); 
+        if(Math.random()>0.5){q=`${n1} + ${n2}`;a=n1+n2}
+        else{if(n1<n2)[n1,n2]=[n2,n1];q=`${n1} - ${n2}`;a=n1-n2}
+    }
+    else if(mathMode==='mult_div'){ 
+        let range = Math.min(12, 5 + Math.ceil(diffFactor/2)); 
+        let n1=r(range)+1, n2=r(range)+1; 
+        if(Math.random()>0.5){q=`${n1} × ${n2}`;a=n1*n2}
+        else{let p=n1*n2;q=`${p} : ${n1}`;a=n2}
+    }
+    else if(mathMode==='frac_add_sub'){ 
+        let d= (r(3)+2)*2, n1=r(d-1), n2=r(d-1); 
+        if(Math.random()>0.5){q=`${n1}/${d} + ${n2}/${d}`;a=`${n1+n2}/${d}`}
+        else{if(n1<n2)[n1,n2]=[n2,n1];q=`${n1}/${d} - ${n2}/${d}`;a=`${n1-n2}/${d}`}} 
+    else if(mathMode==='frac_mult_div'){ 
+        let range = 3 + Math.floor(diffFactor/3);
+        let n1=r(range),d1=r(range)+1,n2=r(range),d2=r(range)+1; 
+        q=`${n1}/${d1} × ${n2}/${d2}`; a=`${n1*n2}/${d1*d2}`; 
+    }
+    return {question:q, answer:a};
+}
+
+function checkAnswer() {
+    const input = document.getElementById('math-answer');
+    const userVal = input.value.trim();
+    let isCorrect = false;
+    
+    if (String(currentMathAnswer).includes('/')) {
+         if (!userVal.includes('/')) { 
+             isCorrect = (parseFloat(userVal) == eval(currentMathAnswer)); 
+         } else { 
+             const [uN, uD] = userVal.split('/').map(Number); 
+             const [cN, cD] = currentMathAnswer.split('/').map(Number); 
+             if (uD && cD && (uN * cD === cN * uD)) isCorrect = true; 
+         }
+    } else { 
+        if (parseInt(userVal) === parseInt(currentMathAnswer)) isCorrect = true; 
+    }
+
+    if (isCorrect) {
+        performAction();
+        closeModal();
+    } else {
+        input.style.borderColor = 'red';
+        document.getElementById('math-feedback').innerText = "FEIL! PRØV IGJEN.";
+        setTimeout(() => { input.style.borderColor = '#bdc3c7'; }, 500);
+    }
+}
+
+function openMathModal(title) { 
+    gameState = 'MODAL'; 
+    document.getElementById('math-overlay').classList.remove('hidden'); 
+    document.getElementById('math-header').innerText = title; 
+    document.getElementById('math-feedback').innerText = ""; 
+    
+    let qa = generateQuestion(); 
+    document.getElementById('math-question').innerText = qa.question; 
+    currentMathAnswer = qa.answer; 
+    
+    let input = document.getElementById('math-answer'); 
+    input.value = ''; 
+    input.focus(); 
+}
+
+function closeModal() { 
+    document.getElementById('math-overlay').classList.add('hidden'); 
+    gameState = 'PLAYING'; 
+    gameLoop(); 
+}
+
+// --- LYD ---
+function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+document.getElementById('math-answer').addEventListener("keypress", function(e) { if (e.key === "Enter") checkAnswer(); });
+/* Version: #1 */
