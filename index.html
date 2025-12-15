@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matte-Forsvarerne 2.0</title>
+    <title>Matte-Forsvarerne 3.0</title>
     <style>
         :root {
             --neon-green: #39ff14;
@@ -57,6 +57,12 @@
             background: var(--neon-pink) !important; border-color: #ffccff !important; 
             box-shadow: 0 0 10px var(--neon-pink);
         }
+        
+        .btn-speed-active {
+            background: #00ffff !important; /* Cyan for active speed */
+            border-color: #ffffff !important;
+            box-shadow: 0 0 10px #00ffff;
+        }
 
         #next-wave-container { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 50; }
         .btn-pulse { animation: pulse 1.5s infinite; }
@@ -98,6 +104,7 @@
             <span>💰 <span id="gold-display">100</span></span>
         </div>
         <div class="control-group">
+            <button class="btn btn-blue" onclick="toggleSpeed()" id="speed-btn" style="padding: 5px 10px; font-size: 0.8rem;">⏩ 1x</button>
             <button class="btn btn-red" onclick="backToMenu()" style="padding: 5px 10px; font-size: 0.8rem;">X</button>
         </div>
     </div>
@@ -110,7 +117,7 @@
         </div>
 
         <div id="start-screen" class="overlay">
-            <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V2.0 Utvidelse</span></h1>
+            <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V3.0 Speed Edition</span></h1>
             
             <div style="display:flex; gap: 20px; margin-bottom: 20px;">
                 <div style="text-align:center;">
@@ -193,10 +200,11 @@
     let lives = 20, wave = 1, gold = 100;
     let frameCount = 0;
     let waveActive = false;
+    let speedMultiplier = 1; // New state variable
 
     // Entities
     let mapBackgroundImage = null;
-    let towers = [], enemies = []; 
+    let towers = [], enemies = [], projectiles = [], floatingTexts = []; 
     let currentPath = [];
     let pendingBuildPos = null, pendingTowerType = null;
     let selectedTower = null; 
@@ -215,8 +223,8 @@
     const TOWER_STATS = {
         normal: { cost: 25, dmg: 15, range: 150, rate: 40, emoji: '🏹', upgrade: {dmg: 1.2, range: 1.1, cost_base: 50} },
         sniper: { cost: 100, dmg: 80, range: 350, rate: 90, emoji: '🔭', upgrade: {dmg: 1.4, range: 1.15, cost_base: 100} },
-        rapid:  { cost: 150, dmg: 6, range: 120, rate: 8, emoji: '⚔️', upgrade: {dmg: 1.1, rate: 0.9, cost_base: 125} }, // Rate factor (lower is faster)
-        ice:    { cost: 125, dmg: 0, range: 150, rate: 50, emoji: '❄️', freeze_duration: 300, upgrade: {freeze_duration: 1.2, cost_base: 80} } // 300 frames = 5 seconds
+        rapid:  { cost: 150, dmg: 6, range: 120, rate: 8, emoji: '⚔️', upgrade: {dmg: 1.1, rate_mult: 0.9, cost_base: 125} }, // rate_mult (lower is faster)
+        ice:    { cost: 125, dmg: 0, range: 150, rate: 50, emoji: '❄️', freeze_duration: 300, upgrade: {freeze_duration_mult: 1.2, cost_base: 80} } // 300 frames = 5 seconds
     };
 
     // --- START LOGIKK ---
@@ -231,12 +239,13 @@
         if (!selectedMap || !mathMode) return;
         try {
             lives = 20; gold = 100; wave = 1; frameCount = 0;
-            towers = []; enemies = []; 
+            towers = []; enemies = []; projectiles = []; floatingTexts = [];
             currentPath = maps[selectedMap].path; 
             mapBackgroundImage = generateMapTexture(maps[selectedMap]);
             
             gameState = 'PLAYING'; 
             waveActive = false; 
+            speedMultiplier = 1;
             
             document.getElementById('start-screen').classList.add('hidden');
             document.getElementById('next-wave-container').classList.remove('hidden');
@@ -252,7 +261,12 @@
 
     function gameLoop() {
         if (gameState !== 'PLAYING') return;
-        updateGame();
+        
+        // Loop update logic based on speedMultiplier
+        for(let i=0; i<speedMultiplier; i++) {
+            updateGame();
+        }
+        
         drawGame();
         requestAnimationFrame(gameLoop);
     }
@@ -273,10 +287,13 @@
             }
             
             if (enemies.length === 0 && waveEnemiesSpawned >= enemiesToSpawn && frameCount > enemiesToSpawn * spawnRate) {
+                // Wave Complete
                 waveActive = false; 
                 wave++; 
                 document.getElementById('next-wave-container').classList.remove('hidden'); 
                 document.getElementById('next-wave-num').innerText = wave;
+                speedMultiplier = 1; // Reset speed
+                updateSpeedBtn();
             }
         }
 
@@ -287,15 +304,34 @@
             if (e.finished) {
                 lives -= 1;
                 enemies.splice(i, 1);
-                if (lives <= 0) alert("GAME OVER"); // Simplified game over
+                if (lives <= 0) alert("GAME OVER");
             } else if (e.health <= 0) {
                 gold += e.reward;
                 enemies.splice(i, 1);
             }
         }
+        
+        // Projectile movement and collision
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            let p = projectiles[i];
+            p.update();
+            if (p.active === false) {
+                projectiles.splice(i, 1);
+            }
+        }
+
 
         // Tower fire logic
         towers.forEach(t => t.update());
+        
+        // Floating text update
+        for (let i = floatingTexts.length - 1; i >= 0; i--) {
+            floatingTexts[i].update();
+            if (floatingTexts[i].life <= 0) {
+                floatingTexts.splice(i, 1);
+            }
+        }
+
 
         updateUI();
     }
@@ -311,6 +347,27 @@
         enemies.push(new Enemy('normal'));
     }
     
+    // Toggle speed function
+    function toggleSpeed() {
+        if (speedMultiplier === 1) {
+            speedMultiplier = 3;
+        } else {
+            speedMultiplier = 1;
+        }
+        updateSpeedBtn();
+    }
+    
+    function updateSpeedBtn() {
+        const btn = document.getElementById('speed-btn');
+        btn.innerText = `⏩ ${speedMultiplier}x`;
+        if (speedMultiplier === 3) {
+            btn.classList.add('btn-speed-active');
+        } else {
+            btn.classList.remove('btn-speed-active');
+        }
+    }
+
+
     // --- DRAWING ---
     function drawGame() {
         if(mapBackgroundImage) ctx.drawImage(mapBackgroundImage, 0, 0); else ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -326,9 +383,17 @@
         ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y); 
         mapData.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
         
-        // Draw Towers and Enemies
+        // Draw Towers, Enemies and Projectiles
         towers.forEach(t => t.draw());
         enemies.forEach(e => e.draw());
+        projectiles.forEach(p => p.draw());
+        
+        // Draw Floating Text
+        ctx.font = 'bold 14px Arial';
+        floatingTexts.forEach(t => {
+            ctx.fillStyle = `rgba(255, 255, 255, ${t.life / 30})`;
+            ctx.fillText(t.text, t.x, t.y);
+        });
     }
 
     // --- KLASSER ---
@@ -341,8 +406,13 @@
             this.emoji = '👾'; this.reward = 5;
         }
         update() {
-            if (this.frozen > 0) { this.frozen--; return; }
-
+            if (this.frozen > 0) { 
+                this.frozen--; 
+                this.speed = 0; // Stop movement completely when frozen
+                return; 
+            }
+            this.speed = this.baseSpeed; // Restore speed
+            
             let target = currentPath[this.pathIdx + 1]; 
             if (!target) { this.finished = true; return; }
             let dx = target.x - this.x; let dy = target.y - this.y; 
@@ -351,8 +421,18 @@
             else { this.x += (dx/dist)*this.speed; this.y += (dy/dist)*this.speed; }
         }
         draw() {
+            // Draw Freeze effect
+            if (this.frozen > 0) {
+                ctx.fillStyle = 'rgba(0, 191, 255, 0.4)'; // Light blue/cyan overlay
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 15, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
             ctx.font = '24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillStyle = '#fff'; ctx.fillText(this.emoji, this.x, this.y);
+            
+            // Health Bar
             let hpPct = this.health / this.maxHp;
             ctx.fillStyle = 'red'; ctx.fillRect(this.x - 10, this.y - 20, 20, 4);
             ctx.fillStyle = 'lime'; ctx.fillRect(this.x - 10, this.y - 20, 20 * hpPct, 4);
@@ -376,12 +456,7 @@
                     if (d <= this.range && d < minDst) { minDst = d; target = e; }
                 }
                 if (target) {
-                    if (this.type === 'ice') {
-                        target.frozen = this.freeze_duration;
-                        target.speed = target.baseSpeed; // Reset speed after freeze
-                    } else {
-                        target.health -= this.dmg;
-                    }
+                    projectiles.push(new Projectile(this.x, this.y, target, this.type, this.dmg, this.freeze_duration));
                     this.cooldown = this.rate;
                 }
             }
@@ -395,6 +470,56 @@
         }
     }
     
+    class Projectile {
+        constructor(x, y, target, type, dmg, freeze_duration = 0) {
+            this.x = x; this.y = y; this.target = target; this.type = type; this.dmg = dmg;
+            this.speed = 15; // Universal speed for simplicity
+            this.active = true;
+            this.freeze_duration = freeze_duration;
+        }
+        update() {
+            if (!this.target || this.target.health <= 0) { this.active = false; return; }
+            
+            let dx = this.target.x - this.x, dy = this.target.y - this.y;
+            let dist = Math.hypot(dx, dy);
+            
+            if (dist < this.speed) {
+                // Collision
+                this.active = false;
+                if (this.type === 'ice') {
+                    this.target.frozen = this.freeze_duration;
+                } else {
+                    this.target.health -= this.dmg;
+                    floatingTexts.push(new FloatingText(this.target.x, this.target.y, Math.round(this.dmg)));
+                }
+            } else { 
+                this.x += (dx/dist)*this.speed; 
+                this.y += (dy/dist)*this.speed; 
+            }
+        }
+        draw() {
+            ctx.fillStyle = (this.type === 'ice') ? '#00ffff' : '#ffff00';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    class FloatingText {
+        constructor(x, y, text) {
+            this.x = x;
+            this.y = y - 10;
+            this.text = "-" + text;
+            this.life = 30; // Frames to live
+            this.vy = -1; // Moves up
+        }
+        update() {
+            this.y += this.vy;
+            this.life--;
+        }
+    }
+
+
     // --- MENY OG UI FUNKSJONER ---
     function updateUI() {
         document.getElementById('lives-display').innerText = lives;
@@ -460,7 +585,8 @@
     function openUpgradeMenu() {
         const stats = TOWER_STATS[selectedTower.type];
         const cost = selectedTower.level * stats.upgrade.cost_base;
-        const sellValue = Math.floor((stats.cost + ((selectedTower.level - 1) * stats.upgrade.cost_base)) / 2);
+        const base_cost = stats.cost;
+        const sellValue = Math.floor((base_cost + ((selectedTower.level - 1) * stats.upgrade.cost_base)) / 2);
 
         document.getElementById('selected-tower-level').innerText = selectedTower.level;
         document.getElementById('upgrade-cost').innerText = cost;
@@ -510,9 +636,9 @@
             gold -= cost;
             
             if (t.type === 'ice') {
-                t.freeze_duration = Math.round(t.freeze_duration * stats.upgrade.freeze_duration);
-            } else if (stats.upgrade.rate) {
-                t.rate = Math.round(t.rate * stats.upgrade.rate);
+                t.freeze_duration = Math.round(t.freeze_duration * stats.upgrade.freeze_duration_mult);
+            } else if (t.type === 'rapid') {
+                t.rate = Math.round(t.rate * stats.upgrade.rate_mult);
                 t.dmg = Math.round(t.dmg * stats.upgrade.dmg);
             } else {
                 t.dmg = Math.round(t.dmg * stats.upgrade.dmg);
@@ -524,6 +650,7 @@
     function generateQuestion() {
         const r = (max) => Math.floor(Math.random() * max) + 1;
         let diffFactor = maps[selectedMap].difficultyMult + (wave * 0.5); 
+        
         let q, a;
         
         if(mathMode==='add_sub'){ 
@@ -558,10 +685,8 @@
         // Complex fractional check needed
         if (String(currentMathAnswer).includes('/')) {
              if (!userVal.includes('/')) { 
-                 // Try parsing simple answer against fractional target
                  isCorrect = (parseFloat(userVal) == eval(currentMathAnswer)); 
              } else { 
-                 // Cross-multiply fractional answers for correctness
                  const [uN, uD] = userVal.split('/').map(Number); 
                  const [cN, cD] = currentMathAnswer.split('/').map(Number); 
                  if (uD && cD && (uN * cD === cN * uD)) isCorrect = true; 
