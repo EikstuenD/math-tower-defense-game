@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matte-Forsvarerne 7.0</title>
+    <title>Matte-Forsvarerne 7.1</title>
     <style>
         :root {
             --neon-green: #39ff14;
@@ -132,7 +132,7 @@
             </div>
 
             <div id="start-screen" class="overlay">
-                <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V7.0 Stabil</span></h1>
+                <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V7.1 Balansering</span></h1>
                 
                 <div style="display:flex; gap: 20px; margin-bottom: 20px;">
                     <div style="text-align:center;">
@@ -221,7 +221,7 @@
             </div>
             <div class="control-group">
                 <button class="btn btn-blue" onclick="toggleSpeed()" id="speed-btn" style="padding: 5px 10px; font-size: 0.8rem;">⏩ 1x</button>
-                <button class="btn btn-red" onclick="backToMenu()" style="padding: 5px 10px; font-size: 0.8rem;">X</button>
+                <button class="btn btn-red" onclick="backToMenu()" style="padding: 5px 10px; font-size: 0.8rem;">MENY</button>
             </div>
         </div>
     </div>
@@ -259,7 +259,7 @@
 
     const TOWER_STATS = {
         normal: { cost: 25, dmg: 15, range: 150, rate: 40, emoji: '🏹', upgrade: {dmg: 1.2, range: 1.1, cost_base: 50} },
-        sniper: { cost: 100, dmg: 80, range: 350, rate: 90, emoji: '🔭', upgrade: {dmg: 1.4, range: 1.15, cost_base: 100} },
+        sniper: { cost: 100, dmg: 65, range: 350, rate: 90, emoji: '🔭', upgrade: {dmg: 1.35, range: 1.1, cost_base: 100} }, // DMG reduced from 80 to 65
         rapid:  { cost: 150, dmg: 6, range: 120, rate: 8, emoji: '⚔️', upgrade: {dmg: 1.1, rate_mult: 0.9, cost_base: 125} },
         ice:    { cost: 125, dmg: 0, range: 150, rate: 50, emoji: '❄️', freeze_duration: 300, upgrade: {freeze_duration_mult: 1.2, cost_base: 80} },
         mine:   { cost: 200, dmg: 0, range: 0, rate: 300, emoji: '⛏️', base_income: 10, upgrade: {income_add: 5, cost_base: 150} } // rate 300 = 5 seconds
@@ -341,7 +341,7 @@
             }
             
             // Critical check for end of wave
-            if (enemies.length === 0 && waveEnemiesSpawned >= enemiesToSpawn && frameCount > enemiesToSpawn * spawnRate) {
+            if (enemies.length === 0 && waveEnemiesSpawned >= enemiesToSpawn) {
                 waveActive = false; 
                 wave++; 
                 // Reset spawn tracking for next wave
@@ -527,7 +527,7 @@
         constructor(x, y, type) {
             this.x = x; this.y = y; this.type = type;
             this.level = 1; this.cooldown = 0; this.paralyzed = 0;
-            this.hasGem = false; // New state
+            this.hasGem = false; 
             const stats = TOWER_STATS[type];
             this.dmg = stats.dmg; this.range = stats.range; this.rate = stats.rate; this.emoji = stats.emoji;
             
@@ -700,7 +700,7 @@
             document.getElementById('mine-income-display').style.display = 'none';
         }
 
-        const sellValue = Math.floor((base_cost + ((selectedTower.level - 1) * cost)) / 2);
+        const sellValue = Math.floor((base_cost + ((selectedTower.level - 1) * cost)) / 2); // Approximation
 
         document.getElementById('selected-tower-level').innerText = selectedTower.level;
         document.getElementById('upgrade-cost').innerText = cost;
@@ -779,7 +779,7 @@
             }
         } else if (currentAction === 'GEM') {
             selectedTower.hasGem = true;
-            selectedTower.dmg = Math.round(selectedTower.dmg * 1.5); // 50% damage boost
+            selectedTower.dmg = Math.round(selectedTower.dmg * 1.5); 
             gems -= 1;
         }
     }
