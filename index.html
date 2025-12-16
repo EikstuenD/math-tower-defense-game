@@ -1,119 +1,121 @@
-<!-- Version: #1 -->
+<!-- Version: #7 -->
 <!DOCTYPE html>
 <html lang="no">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Matte-Forsvarerne 7.1</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matte-Forsvarerne 7.2</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-code
-Code
-<div id="game-container">
-    <div id="game-wrapper">
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
-        
-        <div id="next-wave-container" class="hidden">
-            <button class="btn btn-green btn-pulse" onclick="startNextWave()">START BØLGE <span id="next-wave-num">1</span> ▶</button>
-        </div>
 
-        <div id="start-screen" class="overlay">
-            <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V7.1 Balansering</span></h1>
+    <div id="game-container">
+        <div id="game-wrapper">
+            <canvas id="gameCanvas" width="800" height="600"></canvas>
             
-            <div style="display:flex; gap: 20px; margin-bottom: 20px;">
-                <div style="text-align:center;">
-                    <h3 style="color:#bdc3c7; font-size:0.8rem;">1. VELG BRETT</h3>
-                    <button class="btn" onclick="selectMap(this, 'forest')">🌲 SKOG (Lett)</button><br>
-                    <button class="btn" onclick="selectMap(this, 'desert')">🌵 ØRKEN (Middels)</button><br>
-                    <button class="btn" onclick="selectMap(this, 'volcano')">🌋 VULKAN (Vanskelig)</button>
-                </div>
-                <div style="text-align:center;">
-                    <h3 style="color:#bdc3c7; font-size:0.8rem;">2. VELG TEMA</h3>
-                    <button class="btn" onclick="setMathMode(this, 'add_sub')">PLUSS / MINUS</button><br>
-                    <button class="btn" onclick="setMathMode(this, 'mult_div')">GANGE / DELE</button><br>
-                    <button class="btn" onclick="setMathMode(this, 'frac_add_sub')">BRØK (+/-)</button><br>
-                    <button class="btn" onclick="setMathMode(this, 'frac_mult_div')">BRØK (Gange/Dele)</button>
-                </div>
+            <div id="next-wave-container" class="hidden">
+                <button class="btn btn-green btn-pulse" onclick="startNextWave()">START BØLGE <span id="next-wave-num">1</span> ▶</button>
             </div>
-            
-            <button id="start-btn" class="btn btn-green" style="font-size: 1.2rem; padding: 15px 40px;" disabled onclick="initGame()">START SPILLET</button>
-        </div>
 
-        <div id="tower-select-overlay" class="overlay hidden" style="background: rgba(0,0,0,0.6);">
-            <div id="tower-select-menu">
-                <h3 style="margin-top:0; border-bottom: 2px solid white; padding-bottom:10px;">VELG FORSVAR / INNTEKT</h3>
-                <div class="tower-option" onclick="selectTowerType('normal')">
-                    <span class="tower-icon">🏹</span><b>BUE</b><br><small>25 G</small>
-                </div>
-                <div class="tower-option" onclick="selectTowerType('sniper')">
-                    <span class="tower-icon">🔭</span><b>SNIPER</b><br><small>100 G</small>
-                </div>
-                <div class="tower-option" onclick="selectTowerType('rapid')">
-                    <span class="tower-icon">⚔️</span><b>RASK</b><br><small>150 G</small>
-                </div>
-                <div class="tower-option" onclick="selectTowerType('ice')">
-                    <span class="tower-icon">❄️</span><b>IS</b><br><small>125 G</small>
-                </div>
-                <div class="tower-option" onclick="selectTowerType('mine')">
-                    <span class="tower-icon">⛏️</span><b>GRUVE</b><br><small>200 G</small>
-                </div>
-                <br>
-                <button class="btn btn-red" onclick="closeTowerMenu()">AVBRYT</button>
-            </div>
-        </div>
-
-        <div id="tower-upgrade-overlay" class="overlay hidden" style="background: rgba(0,0,0,0.6);">
-            <div id="tower-upgrade-menu">
-                <h3 id="upgrade-title">TÅRN MENY</h3>
-                <p>NIVÅ: <span id="selected-tower-level">1</span></p>
-                <p id="mine-income-display" style="display:none;"><small>INNTEKT: +<span id="mine-income-value">0</span> G hvert 5s</small></p>
+            <div id="start-screen" class="overlay">
+                <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V7.2 Rutenett & Balanse</span></h1>
                 
-                <button class="btn btn-blue" onclick="initiateUpgrade()">
-                    OPPGRADER ⬆️<br><small>PRIS: <span id="upgrade-cost">50</span> G</small>
-                </button>
+                <div style="display:flex; gap: 20px; margin-bottom: 20px;">
+                    <div style="text-align:center;">
+                        <h3 style="color:#bdc3c7; font-size:0.8rem;">1. VELG BRETT</h3>
+                        <button class="btn" onclick="selectMap(this, 'forest')">🌲 SKOG (Lett)</button><br>
+                        <button class="btn" onclick="selectMap(this, 'desert')">🌵 ØRKEN (Middels)</button><br>
+                        <button class="btn" onclick="selectMap(this, 'volcano')">🌋 VULKAN (Vanskelig)</button>
+                    </div>
+                    <div style="text-align:center;">
+                        <h3 style="color:#bdc3c7; font-size:0.8rem;">2. VELG TEMA</h3>
+                        <button class="btn" onclick="setMathMode(this, 'add_sub')">PLUSS / MINUS</button><br>
+                        <button class="btn" onclick="setMathMode(this, 'mult_div')">GANGE / DELE</button><br>
+                        <button class="btn" onclick="setMathMode(this, 'frac_add_sub')">BRØK (+/-)</button><br>
+                        <button class="btn" onclick="setMathMode(this, 'frac_mult_div')">BRØK (Gange/Dele)</button>
+                    </div>
+                </div>
                 
-                <button id="btn-insert-gem" class="btn btn-purple hidden" onclick="initiateGem()">
-                    SETT INN EDELSTEN (1 💎)
-                </button>
+                <button id="start-btn" class="btn btn-green" style="font-size: 1.2rem; padding: 15px 40px;" disabled onclick="initGame()">START SPILLET</button>
+            </div>
 
-                <button class="btn btn-red" onclick="sellTower()">
-                    SELG 💸<br><small>VERDI: <span id="sell-value">12</span> G</small>
-                </button>
-                <br>
-                <button class="btn" onclick="closeUpgradeMenu()">LUKK</button>
+            <div id="tower-select-overlay" class="overlay hidden" style="background: rgba(0,0,0,0.6);">
+                <div id="tower-select-menu">
+                    <h3 style="margin-top:0; border-bottom: 2px solid white; padding-bottom:10px;">VELG FORSVAR / INNTEKT</h3>
+                    <div class="tower-option" onclick="selectTowerType('normal')">
+                        <span class="tower-icon">🏹</span><b>BUE</b><br><small>25 G</small>
+                    </div>
+                    <div class="tower-option" onclick="selectTowerType('sniper')">
+                        <span class="tower-icon">🔭</span><b>SNIPER</b><br><small>100 G</small>
+                    </div>
+                    <div class="tower-option" onclick="selectTowerType('rapid')">
+                        <span class="tower-icon">⚔️</span><b>RASK</b><br><small>150 G</small>
+                    </div>
+                    <div class="tower-option" onclick="selectTowerType('flame')">
+                        <span class="tower-icon">🔥</span><b>FLAMME</b><br><small>175 G</small>
+                    </div>
+                    <div class="tower-option" onclick="selectTowerType('ice')">
+                        <span class="tower-icon">❄️</span><b>IS</b><br><small>125 G</small>
+                    </div>
+                    <div class="tower-option" onclick="selectTowerType('mine')">
+                        <span class="tower-icon">⛏️</span><b>GRUVE</b><br><small>200 G</small>
+                    </div>
+                    <br>
+                    <button class="btn btn-red" onclick="closeTowerMenu()">AVBRYT</button>
+                </div>
+            </div>
+
+            <div id="tower-upgrade-overlay" class="overlay hidden" style="background: rgba(0,0,0,0.6);">
+                <div id="tower-upgrade-menu">
+                    <h3 id="upgrade-title">TÅRN MENY</h3>
+                    <p>NIVÅ: <span id="selected-tower-level">1</span></p>
+                    <p id="mine-income-display" style="display:none;"><small>INNTEKT: +<span id="mine-income-value">0</span> G hvert 5s</small></p>
+                    
+                    <button class="btn btn-blue" onclick="initiateUpgrade()">
+                        OPPGRADER ⬆️<br><small>PRIS: <span id="upgrade-cost">50</span> G</small>
+                    </button>
+                    
+                    <button id="btn-insert-gem" class="btn btn-purple hidden" onclick="initiateGem()">
+                        SETT INN EDELSTEN (1 💎)
+                    </button>
+
+                    <button class="btn btn-red" onclick="sellTower()">
+                        SELG 💸<br><small>VERDI: <span id="sell-value">12</span> G</small>
+                    </button>
+                    <br>
+                    <button class="btn" onclick="closeUpgradeMenu()">LUKK</button>
+                </div>
+            </div>
+
+            <div id="math-overlay" class="overlay hidden">
+                <div id="math-modal-content">
+                    <div id="math-header">MATTE-OPPGAVE</div>
+                    <div id="math-question">...</div>
+                    <input type="text" id="math-answer" placeholder="?" autocomplete="off">
+                    <div class="hint-text" id="math-feedback" style="color: red; min-height: 20px;"></div>
+                    <div>
+                        <button class="btn btn-green" onclick="checkAnswer()">SVAR ↵</button>
+                    </div>
+                    <button class="btn btn-red" style="margin-top:10px; font-size: 0.8rem;" onclick="closeModal()">AVBRYT</button>
+                </div>
             </div>
         </div>
 
-        <div id="math-overlay" class="overlay hidden">
-            <div id="math-modal-content">
-                <div id="math-header">MATTE-OPPGAVE</div>
-                <div id="math-question">...</div>
-                <input type="text" id="math-answer" placeholder="?" autocomplete="off">
-                <div class="hint-text" id="math-feedback" style="color: red; min-height: 20px;"></div>
-                <div>
-                    <button class="btn btn-green" onclick="checkAnswer()">SVAR ↵</button>
-                </div>
-                <button class="btn btn-red" style="margin-top:10px; font-size: 0.8rem;" onclick="closeModal()">AVBRYT</button>
+        <div id="ui-bar">
+            <div class="stats-group">
+                <span>❤️ <span id="lives-display">20</span></span>
+                <span>🌊 <span id="wave-display">1</span></span>
+                <span>💰 <span id="gold-display">100</span></span>
+                <span style="color: var(--neon-pink);">💎 <span id="gems-display">0</span></span>
+            </div>
+            <div class="control-group">
+                <button class="btn btn-blue" onclick="toggleSpeed()" id="speed-btn" style="padding: 5px 10px; font-size: 0.8rem;">⏩ 1x</button>
+                <button class="btn btn-red" onclick="backToMenu()" style="padding: 5px 10px; font-size: 0.8rem;">MENY</button>
             </div>
         </div>
     </div>
 
-    <div id="ui-bar">
-        <div class="stats-group">
-            <span>❤️ <span id="lives-display">20</span></span>
-            <span>🌊 <span id="wave-display">1</span></span>
-            <span>💰 <span id="gold-display">100</span></span>
-            <span style="color: var(--neon-pink);">💎 <span id="gems-display">0</span></span>
-        </div>
-        <div class="control-group">
-            <button class="btn btn-blue" onclick="toggleSpeed()" id="speed-btn" style="padding: 5px 10px; font-size: 0.8rem;">⏩ 1x</button>
-            <button class="btn btn-red" onclick="backToMenu()" style="padding: 5px 10px; font-size: 0.8rem;">MENY</button>
-        </div>
-    </div>
-</div>
-
-<script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
-<!-- Version: #1 -->
+<!-- Version: #7 -->
