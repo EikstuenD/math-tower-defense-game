@@ -1,6 +1,9 @@
-/* Version: #1 */
+/* Version: #7 */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
+// --- KONFIGURASJON ---
+const GRID_SIZE = 50;
 
 // --- STATE ---
 let gameState = 'MENU';
@@ -11,16 +14,29 @@ let frameCount = 0;
 let waveActive = false;
 let speedMultiplier = 1;
 
+// Math & Logic State
+let mathTasksLeft = 0; // Hvor mange oppgaver gjenstår for handlingen
+let pendingActionFunc = null; // Funksjonen som skal kjøres når matten er ferdig
+
+// Difficulty State
+let perfectWaveStreak = 0; // Antall bølger hvor ingen fiender kom halvveis
+let hardModeActive = false;
+let waveEnemiesCrossedHalfway = false;
+
 // Entities
 let mapBackgroundImage = null;
 let towers = [], enemies = [], projectiles = [], floatingTexts = []; 
 let currentPath = [];
+let pathSegments = []; // For kollisjonssjekk med vei
 let pendingBuildPos = null, pendingTowerType = null;
 let selectedTower = null; 
 let currentMathAnswer = null;
 let currentAction = ''; // 'BUILD', 'UPGRADE', 'GEM'
 let audioCtx = null;
-let waveEnemiesSpawned = 0, waveTotalEnemies = 0;
+let waveEnemiesSpawned = 0;
+
+// Mouse State for Grid Hover
+let mouseX = 0, mouseY = 0;
 
 // --- DATA ---
 const maps = {
@@ -31,10 +47,11 @@ const maps = {
 
 const TOWER_STATS = {
     normal: { cost: 25, dmg: 15, range: 150, rate: 40, emoji: '🏹', upgrade: {dmg: 1.2, range: 1.1, cost_base: 50} },
-    sniper: { cost: 100, dmg: 65, range: 350, rate: 90, emoji: '🔭', upgrade: {dmg: 1.35, range: 1.1, cost_base: 100} }, // DMG reduced from 80 to 65
+    sniper: { cost: 100, dmg: 65, range: 350, rate: 150, emoji: '🔭', upgrade: {dmg: 1.35, range: 1.1, cost_base: 100} }, // Rate økt (tregere)
     rapid:  { cost: 150, dmg: 6, range: 120, rate: 8, emoji: '⚔️', upgrade: {dmg: 1.1, rate_mult: 0.9, cost_base: 125} },
+    flame:  { cost: 175, dmg: 3, range: 90, rate: 5, emoji: '🔥', upgrade: {dmg: 1.2, range: 1.05, cost_base: 140} }, // Nytt tårn
     ice:    { cost: 125, dmg: 0, range: 150, rate: 50, emoji: '❄️', freeze_duration: 300, upgrade: {freeze_duration_mult: 1.2, cost_base: 80} },
-    mine:   { cost: 200, dmg: 0, range: 0, rate: 300, emoji: '⛏️', base_income: 10, upgrade: {income_add: 5, cost_base: 150} } // rate 300 = 5 seconds
+    mine:   { cost: 200, dmg: 0, range: 0, rate: 300, emoji: '⛏️', base_income: 10, upgrade: {income_add: 5, cost_base: 150} } 
 };
 
 // --- START LOGIKK ---
@@ -51,7 +68,19 @@ function initGame() {
         lives = 20; gold = 100; gems = 0; wave = 1; frameCount = 0;
         towers = []; enemies = []; projectiles = []; floatingTexts = [];
         currentPath = maps[selectedMap].path; 
+        
+        // Pre-calculate path segments for collision
+        pathSegments = [];
+        for(let i=0; i<currentPath.length-1; i++) {
+            pathSegments.push({p1: currentPath[i], p2: currentPath[i+1]});
+        }
+
         mapBackgroundImage = generateMapTexture(maps[selectedMap]);
+        
+        // Reset difficulty stats
+        perfectWaveStreak = 0;
+        hardModeActive = false;
+        waveEnemiesCrossedHalfway = false;
         
         gameState = 'PLAYING'; 
         waveActive = false; 
@@ -83,7 +112,7 @@ function gameLoop() {
 function updateGame() {
     if(waveActive) frameCount++;
     
-    // --- Passive Income Check ---
+    // --- Passive Income ---
     if (waveActive && frameCount % (300 / speedMultiplier) === 0) {
         towers.filter(t => t.type === 'mine').forEach(mine => {
             gold += mine.income;
@@ -91,12 +120,11 @@ function updateGame() {
         });
     }
 
-    // --- Boss Paralyze Check (Every 4 seconds if Boss is present) ---
+    // --- Boss Paralyze Check ---
     const bossPresent = enemies.some(e => e.type === 'boss');
     if (bossPresent && frameCount % (240 / speedMultiplier) === 0) {
         paralyzeTowers();
     }
-
 
     // --- Spawn Logic ---
     if(waveActive) {
@@ -112,25 +140,29 @@ function updateGame() {
             } 
         }
         
-        // Critical check for end of wave
+        // End of Wave Check
         if (enemies.length === 0 && waveEnemiesSpawned >= enemiesToSpawn) {
-            waveActive = false; 
-            wave++; 
-            // Reset spawn tracking for next wave
-            waveEnemiesSpawned = 0;
-            frameCount = 0;
-            
-            document.getElementById('next-wave-container').classList.remove('hidden'); 
-            document.getElementById('next-wave-num').innerText = wave;
-            speedMultiplier = 1; 
-            updateSpeedBtn();
+            endWave();
         }
     }
 
-    // Enemy movement & damage
+    // Enemy Update
     for (let i = enemies.length - 1; i >= 0; i--) {
         let e = enemies[i];
         e.update();
+        
+        // Sjekk om Boss knuser tårn
+        if (e.type === 'boss') {
+            for (let tIdx = towers.length - 1; tIdx >= 0; tIdx--) {
+                let t = towers[tIdx];
+                if (Math.hypot(t.x - e.x, t.y - e.y) < 40) {
+                    // Knus tårn!
+                    towers.splice(tIdx, 1);
+                    floatingTexts.push(new FloatingText(t.x, t.y, "KNUST!", '#ff0000'));
+                }
+            }
+        }
+
         if (e.finished) {
             lives -= 1;
             enemies.splice(i, 1);
@@ -141,7 +173,7 @@ function updateGame() {
         }
     }
     
-    // Projectile movement and collision
+    // Projectile Update
     for (let i = projectiles.length - 1; i >= 0; i--) {
         let p = projectiles[i];
         p.update();
@@ -150,10 +182,10 @@ function updateGame() {
         }
     }
 
-    // Tower fire logic
+    // Tower Update
     towers.forEach(t => t.update());
     
-    // Floating text update
+    // Floating Text Update
     for (let i = floatingTexts.length - 1; i >= 0; i--) {
         floatingTexts[i].update();
         if (floatingTexts[i].life <= 0) {
@@ -164,10 +196,36 @@ function updateGame() {
     updateUI();
 }
 
+function endWave() {
+    waveActive = false; 
+    
+    // Sjekk Adaptive Difficulty
+    if (!waveEnemiesCrossedHalfway) {
+        perfectWaveStreak++;
+    } else {
+        perfectWaveStreak = 0;
+    }
+
+    if (perfectWaveStreak >= 5 && !hardModeActive) {
+        hardModeActive = true;
+        alert("HARD MODE AKTIVERT! Monstrene blir sterkere! 💪");
+    }
+
+    wave++; 
+    waveEnemiesSpawned = 0;
+    frameCount = 0;
+    
+    document.getElementById('next-wave-container').classList.remove('hidden'); 
+    document.getElementById('next-wave-num').innerText = wave;
+    speedMultiplier = 1; 
+    updateSpeedBtn();
+}
+
 function startNextWave() {
     waveActive = true;
     waveEnemiesSpawned = 0;
     frameCount = 0;
+    waveEnemiesCrossedHalfway = false; // Nullstill for ny bølge
     document.getElementById('next-wave-container').classList.add('hidden');
 }
 
@@ -186,34 +244,68 @@ function spawnEnemy() {
 
 function paralyzeTowers() {
     towers.forEach(t => t.paralyzed = 0);
-
     const activeTowers = towers.filter(t => t.type !== 'ice' && t.type !== 'mine');
     const numToParalyze = Math.floor(activeTowers.length / 2);
-
     const shuffled = activeTowers.sort(() => 0.5 - Math.random());
     shuffled.slice(0, numToParalyze).forEach(t => {
-        t.paralyzed = 180; // 3 seconds
+        t.paralyzed = 180; 
     });
 }
 
-// Toggle speed function
 function toggleSpeed() {
-    if (speedMultiplier === 1) {
-        speedMultiplier = 3;
-    } else {
-        speedMultiplier = 1;
-    }
+    speedMultiplier = (speedMultiplier === 1) ? 3 : 1;
     updateSpeedBtn();
 }
 
 function updateSpeedBtn() {
     const btn = document.getElementById('speed-btn');
     btn.innerText = `⏩ ${speedMultiplier}x`;
-    if (speedMultiplier === 3) {
-        btn.classList.add('btn-speed-active');
-    } else {
-        btn.classList.remove('btn-speed-active');
+    btn.classList.toggle('btn-speed-active', speedMultiplier === 3);
+}
+
+
+// --- GRID & PATH LOGIKK ---
+function isPointOnPath(x, y) {
+    const pathWidth = 40; // Halvparten av veibredden (ca) + buffer
+    for (let seg of pathSegments) {
+        // Avstand fra punkt til linjestykke
+        let A = x - seg.p1.x;
+        let B = y - seg.p1.y;
+        let C = seg.p2.x - seg.p1.x;
+        let D = seg.p2.y - seg.p1.y;
+
+        let dot = A * C + B * D;
+        let len_sq = C * C + D * D;
+        let param = -1;
+        if (len_sq != 0) //in case of 0 length line
+            param = dot / len_sq;
+
+        let xx, yy;
+
+        if (param < 0) {
+            xx = seg.p1.x;
+            yy = seg.p1.y;
+        }
+        else if (param > 1) {
+            xx = seg.p2.x;
+            yy = seg.p2.y;
+        }
+        else {
+            xx = seg.p1.x + param * C;
+            yy = seg.p1.y + param * D;
+        }
+
+        let dx = x - xx;
+        let dy = y - yy;
+        if (Math.hypot(dx, dy) < pathWidth) return true;
     }
+    return false;
+}
+
+function snapToGrid(x, y) {
+    let gx = Math.floor(x / GRID_SIZE) * GRID_SIZE + GRID_SIZE / 2;
+    let gy = Math.floor(y / GRID_SIZE) * GRID_SIZE + GRID_SIZE / 2;
+    return {x: gx, y: gy};
 }
 
 
@@ -224,26 +316,60 @@ function drawGame() {
     let mapData = maps[selectedMap]; 
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; 
     
-    // Draw Path (Shadow)
+    // Draw Path
     ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 55; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y + 5); 
     mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); ctx.stroke(); 
     
-    // Draw Path (Top)
     ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y); 
     mapData.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
     
+    // Draw Grid (Weak)
+    if (gameState === 'PLAYING') {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= canvas.width; x += GRID_SIZE) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+        for (let y = 0; y <= canvas.height; y += GRID_SIZE) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+        
+        // Draw Hover Effect for Build
+        if (document.getElementById('tower-select-overlay').classList.contains('hidden') === false || currentAction === 'BUILD') {
+           // Ikke tegn hover hvis vi er i menyen, men vi har ikke logikk for det her. 
+           // Vi tegner hover basert på musposisjon hvis vi IKKE holder på med matte-modal.
+        }
+    }
+
+    // Hover effect for Grid placement (Only if overlay is hidden and not in modal)
+    if (gameState === 'PLAYING' && document.getElementById('tower-select-overlay').classList.contains('hidden')) {
+        let snapped = snapToGrid(mouseX, mouseY);
+        let onPath = isPointOnPath(snapped.x, snapped.y);
+        let hasTower = towers.some(t => t.x === snapped.x && t.y === snapped.y);
+        
+        ctx.fillStyle = (onPath || hasTower) ? 'rgba(255, 0, 0, 0.3)' : 'rgba(0, 255, 0, 0.3)';
+        ctx.fillRect(snapped.x - GRID_SIZE/2, snapped.y - GRID_SIZE/2, GRID_SIZE, GRID_SIZE);
+        
+        // Vis rekkevidde hvis vi har valgt et tårn å bygge (menyen er åpen, men vi ser i bakgrunnen)
+        // Litt vanskelig å vise rekkevidde FØR man velger type. 
+    }
+
     // Draw Towers, Enemies and Projectiles
     towers.forEach(t => t.draw());
     enemies.forEach(e => e.draw());
     projectiles.forEach(p => p.draw());
     
-    // Draw Floating Text (Damage numbers)
+    // Floating Text
     ctx.font = 'bold 14px Arial';
     floatingTexts.forEach(t => {
-        ctx.fillStyle = `rgba(255, 255, 255, ${t.life / 30})`;
+        ctx.fillStyle = t.color || `rgba(255, 255, 255, ${t.life / 30})`;
         ctx.fillText(t.text, t.x, t.y);
     });
 }
+
+// Mussporing for rutenett
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+});
+
 
 // --- KLASSER ---
 class Enemy {
@@ -251,9 +377,12 @@ class Enemy {
         this.pathIdx = 0; this.x = currentPath[0].x; this.y = currentPath[0].y;
         this.type = type; this.finished = false; this.frozen = 0;
         
+        // Adaptive Difficulty Boost
+        let difficultyBoost = hardModeActive ? 1.2 : 1.0;
+
         // Stats scaling
-        const HP_SCALE = 1 + (wave * 0.15); // 15% HP per wave
-        const SPEED_SCALE = 1 + (wave * 0.05); // 5% Speed per wave
+        const HP_SCALE = (1 + (wave * 0.15)) * difficultyBoost;
+        const SPEED_SCALE = 1 + (wave * 0.05);
         
         if (type === 'normal') { this.baseSpeed=1.5 * SPEED_SCALE; this.maxHp=30*HP_SCALE; this.emoji='👾'; this.reward=5; }
         if (type === 'tank')   { this.baseSpeed=0.8 * SPEED_SCALE; this.maxHp=100*HP_SCALE; this.emoji='🐗'; this.reward=15; }
@@ -262,6 +391,11 @@ class Enemy {
         
         this.speed = this.baseSpeed;
         this.health = this.maxHp;
+        
+        // Beregn total stilengde for prosent-sjekk
+        this.totalDist = 0;
+        for(let i=0; i<currentPath.length-1; i++) this.totalDist += Math.hypot(currentPath[i+1].x-currentPath[i].x, currentPath[i+1].y-currentPath[i].y);
+        this.traveledDist = 0;
     }
     update() {
         if (this.frozen > 0) { 
@@ -273,10 +407,22 @@ class Enemy {
         
         let target = currentPath[this.pathIdx + 1]; 
         if (!target) { this.finished = true; return; }
+        
         let dx = target.x - this.x; let dy = target.y - this.y; 
         let dist = Math.hypot(dx, dy); 
+        
+        // Flytt fiende
+        let moveDist = Math.min(dist, this.speed);
+        this.x += (dx/dist) * moveDist;
+        this.y += (dy/dist) * moveDist;
+        this.traveledDist += moveDist;
+
+        // Sjekk om krysset 50%
+        if (this.traveledDist / this.totalDist > 0.5) {
+            waveEnemiesCrossedHalfway = true;
+        }
+
         if (dist < this.speed) { this.x = target.x; this.y = target.y; this.pathIdx++; } 
-        else { this.x += (dx/dist)*this.speed; this.y += (dy/dist)*this.speed; }
     }
     draw() {
         if (this.frozen > 0) {
@@ -331,18 +477,14 @@ class Tower {
         
         if (this.hasGem) {
             ctx.fillStyle = 'purple';
-            ctx.beginPath();
-            ctx.arc(this.x + 10, this.y - 10, 5, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(this.x + 10, this.y - 10, 5, 0, Math.PI * 2); ctx.fill();
         }
         
         ctx.fillStyle = 'yellow'; ctx.font = '10px Courier New';
         ctx.fillText("Lvl " + this.level, this.x + 15, this.y + 15);
         
         if(this.type === 'mine') {
-            ctx.fillStyle = 'white'; 
-            ctx.font = '8px Courier New';
-            ctx.fillText(`+${this.income} G`, this.x, this.y + 15);
+            ctx.fillStyle = 'white'; ctx.font = '8px Courier New'; ctx.fillText(`+${this.income} G`, this.x, this.y + 15);
         }
     }
 }
@@ -374,20 +516,21 @@ class Projectile {
         }
     }
     draw() {
-        ctx.fillStyle = (this.type === 'ice') ? '#00ffff' : '#ffff00';
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
-        ctx.fill();
+        if (this.type === 'ice') ctx.fillStyle = '#00ffff';
+        else if (this.type === 'flame') ctx.fillStyle = '#ff4500'; // Oransje for flamme
+        else ctx.fillStyle = '#ffff00';
+        
+        ctx.beginPath(); ctx.arc(this.x, this.y, 3, 0, Math.PI * 2); ctx.fill();
     }
 }
 
 class FloatingText {
-    constructor(x, y, text) {
-        this.x = x;
-        this.y = y - 10;
-        this.text = "-" + text;
+    constructor(x, y, text, color) {
+        this.x = x; this.y = y - 10;
+        this.text = text.toString().startsWith("KNUST") ? text : "-" + text;
         this.life = 30; 
         this.vy = -1; 
+        this.color = color;
     }
     update() {
         this.y += this.vy;
@@ -432,18 +575,29 @@ function backToMenu() {
 // Bygg Tårn Prosess
 document.getElementById('gameCanvas').addEventListener('mousedown', function(e) {
     if (gameState !== 'PLAYING') return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-
-    let clickedTower = towers.find(t => Math.hypot(t.x - mx, t.y - my) < 30);
-
+    
+    // Klikk på eksisterende tårn?
+    let clickedTower = towers.find(t => Math.hypot(t.x - mouseX, t.y - mouseY) < 30);
     if (clickedTower) {
         selectedTower = clickedTower;
         openUpgradeMenu();
         return;
     }
 
-    pendingBuildPos = {x: mx, y: my};
+    // Grid Snap og Validering
+    let snapped = snapToGrid(mouseX, mouseY);
+    if (isPointOnPath(snapped.x, snapped.y)) {
+        // Kan ikke bygge på veien
+        alert("Kan ikke bygge på veien!");
+        return;
+    }
+    
+    // Sjekk overlapp med andre tårn
+    if (towers.some(t => t.x === snapped.x && t.y === snapped.y)) {
+        return; // Allerede tårn her
+    }
+
+    pendingBuildPos = snapped;
     document.getElementById('tower-select-overlay').classList.remove('hidden');
 });
 
@@ -452,6 +606,7 @@ function selectTowerType(type) {
     if (gold < cost) { alert("TRENGER MER GULL! (" + cost + " G)"); return; }
     pendingTowerType = type; 
     currentAction = 'BUILD';
+    mathTasksLeft = 1; // Bygging krever 1 oppgave
     closeTowerMenu(); 
     openMathModal("BYGG " + (type === 'mine' ? 'GRUVE' : type.toUpperCase()));
 }
@@ -462,7 +617,6 @@ function openUpgradeMenu() {
     const base_cost = stats.cost;
     
     let cost;
-    
     if (selectedTower.type === 'mine') {
         cost = selectedTower.level * stats.upgrade.cost_base;
         document.getElementById('mine-income-display').style.display = 'block';
@@ -472,21 +626,19 @@ function openUpgradeMenu() {
         document.getElementById('mine-income-display').style.display = 'none';
     }
 
-    const sellValue = Math.floor((base_cost + ((selectedTower.level - 1) * cost)) / 2); // Approximation
+    const sellValue = Math.floor((base_cost + ((selectedTower.level - 1) * cost)) / 2); 
 
     document.getElementById('selected-tower-level').innerText = selectedTower.level;
     document.getElementById('upgrade-cost').innerText = cost;
     document.getElementById('sell-value').innerText = sellValue;
     document.getElementById('upgrade-title').innerText = selectedTower.type.toUpperCase() + (selectedTower.type === 'mine' ? '' : ' TÅRN');
     
-    // Gem button logic
     const gemBtn = document.getElementById('btn-insert-gem');
     if (selectedTower.type !== 'mine' && selectedTower.hasGem !== true && gems > 0) {
         gemBtn.classList.remove('hidden');
     } else {
         gemBtn.classList.add('hidden');
     }
-
 
     document.getElementById('tower-upgrade-overlay').classList.remove('hidden');
 }
@@ -498,13 +650,15 @@ function initiateUpgrade() {
     if (gold < cost) { alert("TRENGER MER GULL! (" + cost + " G)"); return; }
 
     currentAction = 'UPGRADE';
+    mathTasksLeft = 2; // Oppgradering krever 2 oppgaver
     closeUpgradeMenu();
-    openMathModal("OPPGRADER " + selectedTower.type.toUpperCase());
+    openMathModal("OPPGRADER " + selectedTower.type.toUpperCase() + " (1/2)");
 }
 
 function initiateGem() {
     if (gems < 1) return;
     currentAction = 'GEM';
+    mathTasksLeft = 1;
     closeUpgradeMenu();
     openMathModal("FORSTERK TÅRN");
 }
@@ -604,8 +758,24 @@ function checkAnswer() {
     }
 
     if (isCorrect) {
-        performAction();
-        closeModal();
+        mathTasksLeft--;
+        
+        if (mathTasksLeft > 0) {
+            // Trenger flere rette svar
+            document.getElementById('math-feedback').innerText = "RIKTIG! EN TIL... 🧠";
+            document.getElementById('math-header').innerText = `OPPGRADER ${selectedTower.type.toUpperCase()} (2/2)`;
+            
+            // Ny oppgave
+            let qa = generateQuestion();
+            document.getElementById('math-question').innerText = qa.question;
+            currentMathAnswer = qa.answer;
+            input.value = '';
+            input.focus();
+        } else {
+            // Ferdig!
+            performAction();
+            closeModal();
+        }
     } else {
         input.style.borderColor = 'red';
         document.getElementById('math-feedback').innerText = "FEIL! PRØV IGJEN.";
@@ -638,4 +808,4 @@ function closeModal() {
 function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 
 document.getElementById('math-answer').addEventListener("keypress", function(e) { if (e.key === "Enter") checkAnswer(); });
-/* Version: #1 */
+/* Version: #7 */
