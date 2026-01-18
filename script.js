@@ -1,6 +1,6 @@
-/* Version: #14 - Fix Menu Buttons (Reverted to V9 Logic) */
+/* Version: #15 - Anti-Camping / Build Punishment */
 
-// Hent canvas med en gang (slik det var i versjon 9)
+// Hent canvas med en gang (slik det var i versjon 9/14)
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 
@@ -24,6 +24,10 @@ let pendingActionFunc = null;
 let perfectWaveStreak = 0; 
 let hardModeActive = false;
 let waveEnemiesCrossedHalfway = false;
+
+// NYE VARIABLER FOR STRAFF
+let wavesSinceLastBuild = 0; // Hvor mange bølger siden sist nybygg
+let lazyPenaltyFactor = 1.0; // Multiplikator for HP (øker hvis man ikke bygger)
 
 // Entities
 let mapBackgroundImage = null;
@@ -78,9 +82,12 @@ function initGame() {
 
         mapBackgroundImage = generateMapTexture(maps[selectedMap]);
         
+        // Reset difficulty stats
         perfectWaveStreak = 0;
         hardModeActive = false;
         waveEnemiesCrossedHalfway = false;
+        wavesSinceLastBuild = 0; // Nullstill
+        lazyPenaltyFactor = 1.0; // Nullstill
         
         gameState = 'PLAYING'; 
         waveActive = false; 
@@ -107,7 +114,6 @@ function gameLoop() {
     const overlay = document.getElementById('tower-select-overlay');
     const isBuildMenuOpen = overlay && !overlay.classList.contains('hidden');
     
-    // Hvis menyen er lukket, kjør spillet som vanlig
     if (!isBuildMenuOpen) {
         for(let i=0; i<speedMultiplier; i++) updateGame();
     }
@@ -185,12 +191,21 @@ function updateGame() {
 function endWave() {
     waveActive = false; 
     
+    // Adaptive Difficulty Check
     if (!waveEnemiesCrossedHalfway) perfectWaveStreak++;
     else perfectWaveStreak = 0;
 
     if (perfectWaveStreak >= 5 && !hardModeActive) {
         hardModeActive = true;
         alert("HARD MODE AKTIVERT! Monstrene blir sterkere! 💪");
+    }
+
+    // NY SJEKK: Straff for ikke å bygge
+    wavesSinceLastBuild++;
+    if (wavesSinceLastBuild >= 2) {
+        lazyPenaltyFactor *= 1.2; // 20% økning
+        alert(`Passivitet straffes! 😴\nIngen nye tårn på 2 bølger.\nFiendene får +20% HP! (Totalt: ${Math.round(lazyPenaltyFactor*100)}%)`);
+        wavesSinceLastBuild = 0; // Reset for å gi spilleren en sjanse til
     }
 
     wave++; 
@@ -278,12 +293,10 @@ function snapToGrid(x, y) {
 
 // --- DRAWING ---
 function drawGame() {
-    // Hvis vi ikke har context, ikke gjør noe (forhindrer krasj)
     if (!ctx) return;
     
     if(mapBackgroundImage) ctx.drawImage(mapBackgroundImage, 0, 0); else ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // Hvis vi ikke har valgt kart ennå, ikke tegn mer
     if (!selectedMap || !maps[selectedMap]) return;
 
     let mapData = maps[selectedMap]; 
@@ -326,7 +339,6 @@ function drawGame() {
     });
 }
 
-// Mussporing
 if (canvas) {
     canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
@@ -342,7 +354,10 @@ class Enemy {
         this.type = type; this.finished = false; this.frozen = 0;
         
         let difficultyBoost = hardModeActive ? 1.3 : 1.0;
-        const HP_SCALE = (1 + (wave * 0.25)) * difficultyBoost; 
+        
+        // HER ER ENDRINGEN FOR HP SKALERING + STRAFF
+        const HP_SCALE = (1 + (wave * 0.25)) * difficultyBoost * lazyPenaltyFactor; 
+        
         const SPEED_SCALE = 1 + (wave * 0.05);
         
         if (type === 'normal') { this.baseSpeed=1.5 * SPEED_SCALE; this.maxHp=35*HP_SCALE; this.emoji='👾'; this.reward=5; }
@@ -494,7 +509,7 @@ function updateUI() {
     document.getElementById('gems-display').innerText = gems;
 }
 
-// ⚠️ TILBAKE TIL VERSJON 9 LOGIKK FOR Å FIKSE KNAPPENE ⚠️
+// --- MENY KNAPP FUNKSJONER (V9 LOGIKK) ---
 function selectMap(btn, mapName) { 
     selectedMap = mapName; 
     [...btn.parentElement.children].forEach(c => {if(c.tagName==='BUTTON') c.classList.remove('selected-btn')}); 
@@ -621,6 +636,9 @@ function performAction() {
         selectedTower.boostTimer = 300; 
         floatingTexts.push(new FloatingText(selectedTower.x, selectedTower.y, "BOOST!", "#39ff14"));
     } else if (currentAction === 'BUILD') {
+        // HER NULLSTILLER VI TELLEREN FORDI DU BYGDE NOE NYTT
+        wavesSinceLastBuild = 0;
+        
         const stats = TOWER_STATS[pendingTowerType];
         const t = new Tower(pendingBuildPos.x, pendingBuildPos.y, pendingTowerType);
         towers.push(t);
