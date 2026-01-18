@@ -1,10 +1,10 @@
-<!-- Version: #7 -->
+<!-- Version: #8 - More Math Edition -->
 <!DOCTYPE html>
 <html lang="no">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matte-Forsvarerne 7.2</title>
+    <title>Matte-Forsvarerne 8.0</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,11 +14,12 @@
             <canvas id="gameCanvas" width="800" height="600"></canvas>
             
             <div id="next-wave-container" class="hidden">
-                <button class="btn btn-green btn-pulse" onclick="startNextWave()">START BØLGE <span id="next-wave-num">1</span> ▶</button>
+                <!-- Endret onclick til initiateStartWave() for å kreve matte før bølge -->
+                <button class="btn btn-green btn-pulse" onclick="initiateStartWave()">START BØLGE <span id="next-wave-num">1</span> ▶</button>
             </div>
 
             <div id="start-screen" class="overlay">
-                <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V7.2 Rutenett & Balanse</span></h1>
+                <h1>Matte-Forsvarerne<br><span style="font-size:1.2rem; color:#fff;">V8.0 Mer Matte & Balanse</span></h1>
                 
                 <div style="display:flex; gap: 20px; margin-bottom: 20px;">
                     <div style="text-align:center;">
@@ -118,4 +119,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-<!-- Version: #7 -->
