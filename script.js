@@ -1,4 +1,4 @@
-/* Version: #9 - Build During Wave Edition */
+/* Version: #10 - Fix Build During Wave */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -98,7 +98,15 @@ function initGame() {
 
 function gameLoop() {
     if (gameState !== 'PLAYING') return;
-    for(let i=0; i<speedMultiplier; i++) updateGame();
+
+    // NY ENDRING: Vi pauser oppdateringen (fiender fryser) hvis byggemenyen er åpen
+    // Dette gjør det mindre stressende å bygge, og bekrefter at menyen virker.
+    const isBuildMenuOpen = !document.getElementById('tower-select-overlay').classList.contains('hidden');
+    
+    if (!isBuildMenuOpen) {
+        for(let i=0; i<speedMultiplier; i++) updateGame();
+    }
+    
     drawGame();
     requestAnimationFrame(gameLoop);
 }
@@ -494,7 +502,8 @@ function backToMenu() {
 document.getElementById('gameCanvas').addEventListener('mousedown', function(e) {
     if (gameState !== 'PLAYING') return;
     
-    let clickedTower = towers.find(t => Math.hypot(t.x - mouseX, t.y - mouseY) < 30);
+    // NY FIX: Klikke-radius redusert fra 30 til 20 for å unngå å treffe nabo-tårn ved feil
+    let clickedTower = towers.find(t => Math.hypot(t.x - mouseX, t.y - mouseY) < 20);
     
     if (clickedTower) {
         if (waveActive && clickedTower.type !== 'mine') {
@@ -506,8 +515,6 @@ document.getElementById('gameCanvas').addEventListener('mousedown', function(e) 
         }
         return;
     }
-
-    // Har fjernet "if (waveActive) return;" slik at du kan bygge når som helst.
 
     let snapped = snapToGrid(mouseX, mouseY);
     if (isPointOnPath(snapped.x, snapped.y)) { alert("Kan ikke bygge på veien!"); return; }
@@ -688,8 +695,4 @@ function openMathModal(title) {
 
 function closeModal() { 
     document.getElementById('math-overlay').classList.add('hidden'); 
-    gameState = 'PLAYING'; gameLoop(); 
-}
-
-function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-document.getElementById('math-answer').addEventListener("keypress", function(e) { if (e.key === "Enter") checkAnswer(); });
+    gameState = 'PLA
