@@ -1,6 +1,6 @@
-/* Version: #15 - Anti-Camping / Build Punishment */
+/* Version: #16 - Nightmare Mode (Healers, Teleporters & Exponential HP) */
 
-// Hent canvas med en gang (slik det var i versjon 9/14)
+// Hent canvas
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 
@@ -24,10 +24,8 @@ let pendingActionFunc = null;
 let perfectWaveStreak = 0; 
 let hardModeActive = false;
 let waveEnemiesCrossedHalfway = false;
-
-// NYE VARIABLER FOR STRAFF
-let wavesSinceLastBuild = 0; // Hvor mange bølger siden sist nybygg
-let lazyPenaltyFactor = 1.0; // Multiplikator for HP (øker hvis man ikke bygger)
+let wavesSinceLastBuild = 0; 
+let lazyPenaltyFactor = 1.0; 
 
 // Entities
 let mapBackgroundImage = null;
@@ -82,12 +80,11 @@ function initGame() {
 
         mapBackgroundImage = generateMapTexture(maps[selectedMap]);
         
-        // Reset difficulty stats
         perfectWaveStreak = 0;
         hardModeActive = false;
         waveEnemiesCrossedHalfway = false;
-        wavesSinceLastBuild = 0; // Nullstill
-        lazyPenaltyFactor = 1.0; // Nullstill
+        wavesSinceLastBuild = 0; 
+        lazyPenaltyFactor = 1.0; 
         
         gameState = 'PLAYING'; 
         waveActive = false; 
@@ -100,7 +97,6 @@ function initGame() {
         updateUI();
         initAudio(); 
         
-        // Start loopen
         requestAnimationFrame(gameLoop);
     } catch(e) {
         alert("Feil ved oppstart: " + e.message);
@@ -110,7 +106,6 @@ function initGame() {
 function gameLoop() {
     if (gameState !== 'PLAYING') return;
 
-    // Sjekk om byggemenyen er åpen
     const overlay = document.getElementById('tower-select-overlay');
     const isBuildMenuOpen = overlay && !overlay.classList.contains('hidden');
     
@@ -140,7 +135,8 @@ function updateGame() {
         let enemiesToSpawn = 5 + (wave * 2);
         if (wave % 5 === 0) enemiesToSpawn += 1; 
 
-        let spawnRate = Math.max(20, 80 - (wave * 3)); 
+        // Raskere spawn basert på bølge (ned til minimum 15 frames)
+        let spawnRate = Math.max(15, 70 - (wave * 4)); 
         
         if (waveEnemiesSpawned < enemiesToSpawn) { 
             if (frameCount % spawnRate === 0) { 
@@ -191,7 +187,6 @@ function updateGame() {
 function endWave() {
     waveActive = false; 
     
-    // Adaptive Difficulty Check
     if (!waveEnemiesCrossedHalfway) perfectWaveStreak++;
     else perfectWaveStreak = 0;
 
@@ -200,12 +195,11 @@ function endWave() {
         alert("HARD MODE AKTIVERT! Monstrene blir sterkere! 💪");
     }
 
-    // NY SJEKK: Straff for ikke å bygge
     wavesSinceLastBuild++;
     if (wavesSinceLastBuild >= 2) {
-        lazyPenaltyFactor *= 1.2; // 20% økning
+        lazyPenaltyFactor *= 1.2; 
         alert(`Passivitet straffes! 😴\nIngen nye tårn på 2 bølger.\nFiendene får +20% HP! (Totalt: ${Math.round(lazyPenaltyFactor*100)}%)`);
-        wavesSinceLastBuild = 0; // Reset for å gi spilleren en sjanse til
+        wavesSinceLastBuild = 0; 
     }
 
     wave++; 
@@ -234,11 +228,23 @@ function startNextWave() {
 
 function spawnEnemy() {
     let type = 'normal';
-    if (wave % 5 === 0 && waveEnemiesSpawned === (5 + (wave * 2))) type = 'boss';
-    else {
+    
+    // Spawn logikk med nye fiender
+    if (wave % 5 === 0 && waveEnemiesSpawned === (5 + (wave * 2))) {
+        type = 'boss';
+    } else {
         let r = Math.random();
-        if (r < 0.25) type = 'tank';
-        else if (r < 0.50) type = 'rapid'; 
+        // Øk sjansen for vanskelige fiender basert på bølge
+        let specialChance = Math.min(0.6, 0.1 + (wave * 0.05));
+        
+        if (r < specialChance) {
+            let subR = Math.random();
+            if (subR < 0.33) type = 'tank';
+            else if (subR < 0.66) type = 'shadow'; // Teleporter
+            else type = 'healer'; // Healer
+        } else if (r < specialChance + 0.2) {
+            type = 'rapid';
+        }
     }
     enemies.push(new Enemy(type));
 }
@@ -294,21 +300,17 @@ function snapToGrid(x, y) {
 // --- DRAWING ---
 function drawGame() {
     if (!ctx) return;
-    
     if(mapBackgroundImage) ctx.drawImage(mapBackgroundImage, 0, 0); else ctx.clearRect(0,0,canvas.width,canvas.height);
-
     if (!selectedMap || !maps[selectedMap]) return;
 
     let mapData = maps[selectedMap]; 
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; 
     
-    // Path
     ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 55; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y + 5); 
     mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); ctx.stroke(); 
     ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y); 
     mapData.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
     
-    // Grid & Hover
     if (gameState === 'PLAYING') {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'; ctx.lineWidth = 1;
         for (let x = 0; x <= canvas.width; x += GRID_SIZE) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
@@ -323,7 +325,6 @@ function drawGame() {
             if (hasTower) ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
             else if (onPath) ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
             else ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
-            
             ctx.fillRect(snapped.x - GRID_SIZE/2, snapped.y - GRID_SIZE/2, GRID_SIZE, GRID_SIZE);
         }
     }
@@ -353,17 +354,26 @@ class Enemy {
         this.pathIdx = 0; this.x = currentPath[0].x; this.y = currentPath[0].y;
         this.type = type; this.finished = false; this.frozen = 0;
         
-        let difficultyBoost = hardModeActive ? 1.3 : 1.0;
-        
-        // HER ER ENDRINGEN FOR HP SKALERING + STRAFF
-        const HP_SCALE = (1 + (wave * 0.25)) * difficultyBoost * lazyPenaltyFactor; 
-        
+        // EKSPONENTIELL SKALERING: (1.15)^wave. Det blir fort mye!
+        let scaling = Math.pow(1.15, wave) * lazyPenaltyFactor;
+        if (hardModeActive) scaling *= 1.3;
+
         const SPEED_SCALE = 1 + (wave * 0.05);
         
-        if (type === 'normal') { this.baseSpeed=1.5 * SPEED_SCALE; this.maxHp=35*HP_SCALE; this.emoji='👾'; this.reward=5; }
-        if (type === 'tank')   { this.baseSpeed=0.8 * SPEED_SCALE; this.maxHp=120*HP_SCALE; this.emoji='🐗'; this.reward=15; }
-        if (type === 'rapid')  { this.baseSpeed=3.0 * SPEED_SCALE; this.maxHp=20*HP_SCALE; this.emoji='🦇'; this.reward=8; }
-        if (type === 'boss')   { this.baseSpeed=0.6 * SPEED_SCALE; this.maxHp=400*HP_SCALE; this.emoji='👹'; this.reward=50; }
+        // Default stats
+        this.baseSpeed = 1.5 * SPEED_SCALE;
+        this.maxHp = 35 * scaling;
+        this.emoji = '👾';
+        this.reward = 5;
+
+        // Spesifikke stats
+        if (type === 'tank')   { this.baseSpeed=0.8 * SPEED_SCALE; this.maxHp=120 * scaling; this.emoji='🐗'; this.reward=15; }
+        if (type === 'rapid')  { this.baseSpeed=3.0 * SPEED_SCALE; this.maxHp=20 * scaling; this.emoji='🦇'; this.reward=8; }
+        if (type === 'boss')   { this.baseSpeed=0.6 * SPEED_SCALE; this.maxHp=400 * scaling; this.emoji='👹'; this.reward=50; }
+        
+        // NYE FIENDER
+        if (type === 'shadow') { this.baseSpeed=2.0 * SPEED_SCALE; this.maxHp=30 * scaling; this.emoji='👻'; this.reward=12; }
+        if (type === 'healer') { this.baseSpeed=1.0 * SPEED_SCALE; this.maxHp=60 * scaling; this.emoji='🚑'; this.reward=20; }
         
         this.speed = this.baseSpeed;
         this.health = this.maxHp;
@@ -372,10 +382,34 @@ class Enemy {
         for(let i=0; i<currentPath.length-1; i++) this.totalDist += Math.hypot(currentPath[i+1].x-currentPath[i].x, currentPath[i+1].y-currentPath[i].y);
         this.traveledDist = 0;
     }
+
     update() {
         if (this.frozen > 0) { this.frozen--; this.speed = 0; return; }
         this.speed = this.baseSpeed; 
         
+        // Shadow Teleport Ability
+        if (this.type === 'shadow' && frameCount % 180 === 0 && Math.random() > 0.5) {
+            // Hopp over 2 path noder hvis mulig
+            if (this.pathIdx < currentPath.length - 3) {
+                this.pathIdx += 2;
+                this.x = currentPath[this.pathIdx].x;
+                this.y = currentPath[this.pathIdx].y;
+                floatingTexts.push(new FloatingText(this.x, this.y, "HOPP!", "#888"));
+            }
+        }
+
+        // Healer Ability
+        if (this.type === 'healer' && frameCount % 60 === 0) {
+            enemies.forEach(other => {
+                if (other !== this && Math.hypot(this.x - other.x, this.y - other.y) < 100) {
+                    if (other.health < other.maxHp) {
+                        other.health = Math.min(other.health + 20, other.maxHp);
+                        floatingTexts.push(new FloatingText(other.x, other.y, "+20", "#0f0"));
+                    }
+                }
+            });
+        }
+
         let target = currentPath[this.pathIdx + 1]; 
         if (!target) { this.finished = true; return; }
         
@@ -389,11 +423,19 @@ class Enemy {
         if (this.traveledDist / this.totalDist > 0.5) waveEnemiesCrossedHalfway = true;
         if (dist < this.speed) { this.x = target.x; this.y = target.y; this.pathIdx++; } 
     }
+
     draw() {
         if (this.frozen > 0) {
             ctx.fillStyle = 'rgba(0, 191, 255, 0.4)'; 
             ctx.beginPath(); ctx.arc(this.x, this.y, 15, 0, Math.PI * 2); ctx.fill();
         }
+        
+        // Healer Aura
+        if (this.type === 'healer') {
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.beginPath(); ctx.arc(this.x, this.y, 50, 0, Math.PI*2); ctx.stroke();
+        }
+
         ctx.font = (this.type === 'boss') ? '36px Arial' : '24px Arial';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = '#fff'; ctx.fillText(this.emoji, this.x, this.y);
@@ -509,7 +551,7 @@ function updateUI() {
     document.getElementById('gems-display').innerText = gems;
 }
 
-// --- MENY KNAPP FUNKSJONER (V9 LOGIKK) ---
+// --- MENY KNAPP FUNKSJONER ---
 function selectMap(btn, mapName) { 
     selectedMap = mapName; 
     [...btn.parentElement.children].forEach(c => {if(c.tagName==='BUTTON') c.classList.remove('selected-btn')}); 
@@ -636,9 +678,7 @@ function performAction() {
         selectedTower.boostTimer = 300; 
         floatingTexts.push(new FloatingText(selectedTower.x, selectedTower.y, "BOOST!", "#39ff14"));
     } else if (currentAction === 'BUILD') {
-        // HER NULLSTILLER VI TELLEREN FORDI DU BYGDE NOE NYTT
         wavesSinceLastBuild = 0;
-        
         const stats = TOWER_STATS[pendingTowerType];
         const t = new Tower(pendingBuildPos.x, pendingBuildPos.y, pendingTowerType);
         towers.push(t);
