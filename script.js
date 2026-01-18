@@ -1,6 +1,6 @@
-/* Version: #12 - Crash Proof Menu */
+/* Version: #13 - Initialization Fix */
 
-// Vi definerer variablene først, men henter dem ikke før spillet starter
+// Globale variabler
 let canvas = null;
 let ctx = null;
 
@@ -65,12 +65,12 @@ function generateMapTexture(mapData) {
 }
 
 function initGame() {
-    // SIKRING: Hent canvas nå, i tilfelle det feilet ved innlasting
+    if (!selectedMap || !mathMode) { alert("Velg kart og tema først!"); return; }
+    
+    // Hent canvas på nytt for sikkerhets skyld
     canvas = document.getElementById('gameCanvas');
-    if (!canvas) { alert("Fant ikke gameCanvas! Sjekk HTML."); return; }
     ctx = canvas.getContext('2d');
 
-    if (!selectedMap || !mathMode) return;
     try {
         lives = 20; gold = 100; gems = 0; wave = 1; frameCount = 0;
         towers = []; enemies = []; projectiles = []; floatingTexts = [];
@@ -98,7 +98,6 @@ function initGame() {
         updateUI();
         initAudio(); 
         
-        // Start spill-løkken
         requestAnimationFrame(gameLoop);
     } catch(e) {
         console.error(e);
@@ -109,7 +108,6 @@ function initGame() {
 function gameLoop() {
     if (gameState !== 'PLAYING') return;
 
-    // Sjekk om byggemenyen er åpen (Safe check)
     const overlay = document.getElementById('tower-select-overlay');
     const isBuildMenuOpen = overlay && !overlay.classList.contains('hidden');
     
@@ -189,47 +187,29 @@ function updateGame() {
 
 function endWave() {
     waveActive = false; 
-    
-    if (!waveEnemiesCrossedHalfway) perfectWaveStreak++;
-    else perfectWaveStreak = 0;
+    if (!waveEnemiesCrossedHalfway) perfectWaveStreak++; else perfectWaveStreak = 0;
+    if (perfectWaveStreak >= 5 && !hardModeActive) { hardModeActive = true; alert("HARD MODE AKTIVERT! Monstrene blir sterkere! 💪"); }
 
-    if (perfectWaveStreak >= 5 && !hardModeActive) {
-        hardModeActive = true;
-        alert("HARD MODE AKTIVERT! Monstrene blir sterkere! 💪");
-    }
-
-    wave++; 
-    waveEnemiesSpawned = 0;
-    frameCount = 0;
-    
+    wave++; waveEnemiesSpawned = 0; frameCount = 0;
     document.getElementById('next-wave-container').classList.remove('hidden'); 
     document.getElementById('next-wave-num').innerText = wave;
-    speedMultiplier = 1; 
-    updateSpeedBtn();
+    speedMultiplier = 1; updateSpeedBtn();
 }
 
 function initiateStartWave() {
-    currentAction = 'START_WAVE';
-    mathTasksLeft = 1;
+    currentAction = 'START_WAVE'; mathTasksLeft = 1;
     openMathModal(`LØS FOR Å STARTE BØLGE ${wave}`);
 }
 
 function startNextWave() {
-    waveActive = true;
-    waveEnemiesSpawned = 0;
-    frameCount = 0;
-    waveEnemiesCrossedHalfway = false; 
+    waveActive = true; waveEnemiesSpawned = 0; frameCount = 0; waveEnemiesCrossedHalfway = false; 
     document.getElementById('next-wave-container').classList.add('hidden');
 }
 
 function spawnEnemy() {
     let type = 'normal';
     if (wave % 5 === 0 && waveEnemiesSpawned === (5 + (wave * 2))) type = 'boss';
-    else {
-        let r = Math.random();
-        if (r < 0.25) type = 'tank';
-        else if (r < 0.50) type = 'rapid'; 
-    }
+    else { let r = Math.random(); if (r < 0.25) type = 'tank'; else if (r < 0.50) type = 'rapid'; }
     enemies.push(new Enemy(type));
 }
 
@@ -238,9 +218,7 @@ function paralyzeTowers() {
     const activeTowers = towers.filter(t => t.type !== 'ice' && t.type !== 'mine');
     const numToParalyze = Math.floor(activeTowers.length / 2);
     const shuffled = activeTowers.sort(() => 0.5 - Math.random());
-    shuffled.slice(0, numToParalyze).forEach(t => {
-        t.paralyzed = 180; 
-    });
+    shuffled.slice(0, numToParalyze).forEach(t => { t.paralyzed = 180; });
 }
 
 function toggleSpeed() {
@@ -250,10 +228,7 @@ function toggleSpeed() {
 
 function updateSpeedBtn() {
     const btn = document.getElementById('speed-btn');
-    if(btn) {
-        btn.innerText = `⏩ ${speedMultiplier}x`;
-        btn.classList.toggle('btn-speed-active', speedMultiplier === 3);
-    }
+    if(btn) { btn.innerText = `⏩ ${speedMultiplier}x`; btn.classList.toggle('btn-speed-active', speedMultiplier === 3); }
 }
 
 // --- GRID & PATH LOGIKK ---
@@ -283,439 +258,4 @@ function snapToGrid(x, y) {
 
 // --- DRAWING ---
 function drawGame() {
-    // SIKRING: Hvis ctx mangler (feil innlasting) eller kart ikke er valgt, stopp tegning
-    if (!ctx || !selectedMap || !maps[selectedMap]) return;
-
-    if(mapBackgroundImage) ctx.drawImage(mapBackgroundImage, 0, 0); else ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    let mapData = maps[selectedMap]; 
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; 
-    
-    // Path
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 55; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y + 5); 
-    mapData.path.forEach(p => ctx.lineTo(p.x, p.y + 5)); ctx.stroke(); 
-    ctx.strokeStyle = mapData.pathColor; ctx.lineWidth = 45; ctx.beginPath(); ctx.moveTo(mapData.path[0].x, mapData.path[0].y); 
-    mapData.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
-    
-    // Grid & Hover
-    if (gameState === 'PLAYING') {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'; ctx.lineWidth = 1;
-        for (let x = 0; x <= canvas.width; x += GRID_SIZE) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-        for (let y = 0; y <= canvas.height; y += GRID_SIZE) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
-        
-        let overlay = document.getElementById('tower-select-overlay');
-        if (overlay && overlay.classList.contains('hidden')) {
-            let snapped = snapToGrid(mouseX, mouseY);
-            let onPath = isPointOnPath(snapped.x, snapped.y);
-            let hasTower = towers.some(t => t.x === snapped.x && t.y === snapped.y);
-            
-            if (hasTower) ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
-            else if (onPath) ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
-            else ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
-            
-            ctx.fillRect(snapped.x - GRID_SIZE/2, snapped.y - GRID_SIZE/2, GRID_SIZE, GRID_SIZE);
-        }
-    }
-
-    towers.forEach(t => t.draw());
-    enemies.forEach(e => e.draw());
-    projectiles.forEach(p => p.draw());
-    
-    ctx.font = 'bold 14px Arial';
-    floatingTexts.forEach(t => {
-        ctx.fillStyle = t.color || `rgba(255, 255, 255, ${t.life / 30})`;
-        ctx.fillText(t.text, t.x, t.y);
-    });
-}
-
-// Mussporing lagt til på document for sikkerhet, men sjekker canvas
-document.addEventListener('mousemove', (e) => {
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    mouseX = e.clientX - rect.left;
-    mouseY = e.clientY - rect.top;
-});
-
-// --- KLASSER ---
-class Enemy {
-    constructor(type) {
-        this.pathIdx = 0; this.x = currentPath[0].x; this.y = currentPath[0].y;
-        this.type = type; this.finished = false; this.frozen = 0;
-        
-        let difficultyBoost = hardModeActive ? 1.3 : 1.0;
-        const HP_SCALE = (1 + (wave * 0.25)) * difficultyBoost; 
-        const SPEED_SCALE = 1 + (wave * 0.05);
-        
-        if (type === 'normal') { this.baseSpeed=1.5 * SPEED_SCALE; this.maxHp=35*HP_SCALE; this.emoji='👾'; this.reward=5; }
-        if (type === 'tank')   { this.baseSpeed=0.8 * SPEED_SCALE; this.maxHp=120*HP_SCALE; this.emoji='🐗'; this.reward=15; }
-        if (type === 'rapid')  { this.baseSpeed=3.0 * SPEED_SCALE; this.maxHp=20*HP_SCALE; this.emoji='🦇'; this.reward=8; }
-        if (type === 'boss')   { this.baseSpeed=0.6 * SPEED_SCALE; this.maxHp=400*HP_SCALE; this.emoji='👹'; this.reward=50; }
-        
-        this.speed = this.baseSpeed;
-        this.health = this.maxHp;
-        
-        this.totalDist = 0;
-        for(let i=0; i<currentPath.length-1; i++) this.totalDist += Math.hypot(currentPath[i+1].x-currentPath[i].x, currentPath[i+1].y-currentPath[i].y);
-        this.traveledDist = 0;
-    }
-    update() {
-        if (this.frozen > 0) { this.frozen--; this.speed = 0; return; }
-        this.speed = this.baseSpeed; 
-        
-        let target = currentPath[this.pathIdx + 1]; 
-        if (!target) { this.finished = true; return; }
-        
-        let dx = target.x - this.x; let dy = target.y - this.y; 
-        let dist = Math.hypot(dx, dy); 
-        let moveDist = Math.min(dist, this.speed);
-        this.x += (dx/dist) * moveDist;
-        this.y += (dy/dist) * moveDist;
-        this.traveledDist += moveDist;
-
-        if (this.traveledDist / this.totalDist > 0.5) waveEnemiesCrossedHalfway = true;
-        if (dist < this.speed) { this.x = target.x; this.y = target.y; this.pathIdx++; } 
-    }
-    draw() {
-        if (this.frozen > 0) {
-            ctx.fillStyle = 'rgba(0, 191, 255, 0.4)'; 
-            ctx.beginPath(); ctx.arc(this.x, this.y, 15, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.font = (this.type === 'boss') ? '36px Arial' : '24px Arial';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#fff'; ctx.fillText(this.emoji, this.x, this.y);
-        
-        let hpPct = this.health / this.maxHp;
-        ctx.fillStyle = 'red'; ctx.fillRect(this.x - 10, this.y - 20, 20, 4);
-        ctx.fillStyle = 'lime'; ctx.fillRect(this.x - 10, this.y - 20, 20 * hpPct, 4);
-    }
-}
-
-class Tower {
-    constructor(x, y, type) {
-        this.x = x; this.y = y; this.type = type;
-        this.level = 1; this.cooldown = 0; this.paralyzed = 0;
-        this.hasGem = false; 
-        this.boostTimer = 0; 
-        const stats = TOWER_STATS[type];
-        this.dmg = stats.dmg; this.range = stats.range; this.rate = stats.rate; this.emoji = stats.emoji;
-        
-        if (type === 'ice') this.freeze_duration = stats.freeze_duration;
-        if (type === 'mine') this.income = stats.base_income;
-    }
-    update() {
-        if (this.paralyzed > 0) { this.paralyzed--; return; } 
-        if (this.boostTimer > 0) this.boostTimer--; 
-
-        if(this.type === 'mine') return; 
-
-        if (this.cooldown > 0) this.cooldown--;
-        if (this.cooldown <= 0) {
-            let target = null, minDst = Infinity;
-            for (let e of enemies) {
-                let d = Math.hypot(e.x - this.x, e.y - this.y);
-                if (d <= this.range && d < minDst) { minDst = d; target = e; }
-            }
-            if (target) {
-                projectiles.push(new Projectile(this.x, this.y, target, this.type, this.dmg * (this.hasGem ? 1.5 : 1), this.freeze_duration));
-                this.cooldown = (this.boostTimer > 0) ? this.rate / 2 : this.rate;
-            }
-        }
-    }
-    draw() {
-        if (this.boostTimer > 0) {
-            ctx.shadowBlur = 15; ctx.shadowColor = "#39ff14"; 
-        } else {
-            ctx.shadowBlur = 0;
-        }
-
-        ctx.fillStyle = this.paralyzed > 0 ? '#444' : (this.type === 'mine' ? '#f1c40f' : '#7f8c8d');
-        ctx.fillRect(this.x - 15, this.y - 15, 30, 30);
-        ctx.shadowBlur = 0; 
-
-        ctx.font = '24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(this.emoji, this.x, this.y);
-        
-        if (this.hasGem) {
-            ctx.fillStyle = 'purple';
-            ctx.beginPath(); ctx.arc(this.x + 10, this.y - 10, 5, 0, Math.PI * 2); ctx.fill();
-        }
-        if (this.boostTimer > 0) {
-            ctx.fillStyle = '#39ff14'; ctx.font = 'bold 10px Arial';
-            ctx.fillText("BOOST!", this.x, this.y - 20);
-        }
-        
-        ctx.fillStyle = 'yellow'; ctx.font = '10px Courier New';
-        ctx.fillText("Lvl " + this.level, this.x + 15, this.y + 15);
-        if(this.type === 'mine') {
-            ctx.fillStyle = 'white'; ctx.font = '8px Courier New'; ctx.fillText(`+${this.income} G`, this.x, this.y + 15);
-        }
-    }
-}
-
-class Projectile {
-    constructor(x, y, target, type, dmg, freeze_duration = 0) {
-        this.x = x; this.y = y; this.target = target; this.type = type; this.dmg = dmg;
-        this.speed = 15; this.active = true; this.freeze_duration = freeze_duration;
-    }
-    update() {
-        if (!this.target || this.target.health <= 0) { this.active = false; return; }
-        let dx = this.target.x - this.x, dy = this.target.y - this.y;
-        let dist = Math.hypot(dx, dy);
-        if (dist < this.speed) {
-            this.active = false;
-            if (this.type === 'ice') this.target.frozen = this.freeze_duration;
-            else {
-                this.target.health -= this.dmg;
-                floatingTexts.push(new FloatingText(this.target.x, this.target.y, Math.round(this.dmg)));
-            }
-        } else { this.x += (dx/dist)*this.speed; this.y += (dy/dist)*this.speed; }
-    }
-    draw() {
-        if (this.type === 'ice') ctx.fillStyle = '#00ffff';
-        else if (this.type === 'flame') ctx.fillStyle = '#ff4500';
-        else ctx.fillStyle = '#ffff00';
-        ctx.beginPath(); ctx.arc(this.x, this.y, 3, 0, Math.PI * 2); ctx.fill();
-    }
-}
-
-class FloatingText {
-    constructor(x, y, text, color) {
-        this.x = x; this.y = y - 10;
-        this.text = text.toString().startsWith("KNUST") ? text : "-" + text;
-        this.life = 30; this.vy = -1; this.color = color;
-    }
-    update() { this.y += this.vy; this.life--; }
-}
-
-// --- UI FUNKSJONER ---
-function updateUI() {
-    document.getElementById('lives-display').innerText = lives;
-    document.getElementById('wave-display').innerText = wave;
-    document.getElementById('gold-display').innerText = gold;
-    document.getElementById('gems-display').innerText = gems;
-}
-
-// Sikret selectMap funksjon
-function selectMap(btn, mapName) { 
-    selectedMap = mapName; 
-    // Gå opp til forelder, finn alle knapper i samme gruppe, fjern markering
-    const parent = btn.parentNode;
-    const siblings = parent.querySelectorAll('button');
-    siblings.forEach(b => b.classList.remove('selected-btn'));
-    
-    btn.classList.add('selected-btn'); 
-    checkStartReady(); 
-}
-
-// Sikret setMathMode funksjon
-function setMathMode(btn, mode) { 
-    mathMode = mode; 
-    const parent = btn.parentNode;
-    const siblings = parent.querySelectorAll('button');
-    siblings.forEach(b => b.classList.remove('selected-btn'));
-
-    btn.classList.add('selected-btn'); 
-    checkStartReady(); 
-}
-
-function checkStartReady() { 
-    const startBtn = document.getElementById('start-btn');
-    if(startBtn) startBtn.disabled = !(selectedMap && mathMode); 
-}
-
-function backToMenu() {
-    if(!confirm("Avslutte til meny?")) return;
-    gameState = 'MENU';
-    document.getElementById('start-screen').classList.remove('hidden');
-    document.getElementById('next-wave-container').classList.add('hidden');
-}
-
-// INTERAKSJON LOGIKK
-document.getElementById('gameCanvas').addEventListener('mousedown', function(e) {
-    if (gameState !== 'PLAYING') return;
-    
-    // Klikke-radius 20 for å være mer presis
-    let clickedTower = towers.find(t => Math.hypot(t.x - mouseX, t.y - mouseY) < 20);
-    
-    if (clickedTower) {
-        // Klikk på tårn gir BOOST (hvis ikke gruve)
-        if (waveActive && clickedTower.type !== 'mine') {
-            selectedTower = clickedTower;
-            initiateBoost(clickedTower);
-        } else {
-            selectedTower = clickedTower;
-            openUpgradeMenu();
-        }
-        return;
-    }
-
-    let snapped = snapToGrid(mouseX, mouseY);
-    if (isPointOnPath(snapped.x, snapped.y)) { alert("Kan ikke bygge på veien!"); return; }
-    if (towers.some(t => t.x === snapped.x && t.y === snapped.y)) return; 
-
-    pendingBuildPos = snapped;
-    document.getElementById('tower-select-overlay').classList.remove('hidden');
-});
-
-function selectTowerType(type) {
-    const cost = TOWER_STATS[type].cost;
-    if (gold < cost) { alert("TRENGER MER GULL! (" + cost + " G)"); return; }
-    pendingTowerType = type; 
-    currentAction = 'BUILD';
-    mathTasksLeft = 1; 
-    closeTowerMenu(); 
-    openMathModal("BYGG " + (type === 'mine' ? 'GRUVE' : type.toUpperCase()));
-}
-
-function openUpgradeMenu() {
-    const stats = TOWER_STATS[selectedTower.type];
-    const base_cost = stats.cost;
-    
-    let cost;
-    if (selectedTower.type === 'mine') {
-        cost = selectedTower.level * stats.upgrade.cost_base;
-        document.getElementById('mine-income-display').style.display = 'block';
-        document.getElementById('mine-income-value').innerText = selectedTower.income;
-    } else {
-        cost = selectedTower.level * stats.upgrade.cost_base;
-        document.getElementById('mine-income-display').style.display = 'none';
-    }
-
-    const sellValue = Math.floor((base_cost + ((selectedTower.level - 1) * cost)) / 2); 
-    document.getElementById('selected-tower-level').innerText = selectedTower.level;
-    document.getElementById('upgrade-cost').innerText = cost;
-    document.getElementById('sell-value').innerText = sellValue;
-    document.getElementById('upgrade-title').innerText = selectedTower.type.toUpperCase() + (selectedTower.type === 'mine' ? '' : ' TÅRN');
-    
-    const gemBtn = document.getElementById('btn-insert-gem');
-    if (selectedTower.type !== 'mine' && selectedTower.hasGem !== true && gems > 0) gemBtn.classList.remove('hidden');
-    else gemBtn.classList.add('hidden');
-
-    document.getElementById('tower-upgrade-overlay').classList.remove('hidden');
-}
-
-function initiateUpgrade() {
-    const stats = TOWER_STATS[selectedTower.type];
-    let cost = selectedTower.level * stats.upgrade.cost_base;
-    if (gold < cost) { alert("TRENGER MER GULL! (" + cost + " G)"); return; }
-    currentAction = 'UPGRADE'; mathTasksLeft = 2; 
-    closeUpgradeMenu();
-    openMathModal("OPPGRADER " + selectedTower.type.toUpperCase() + " (1/2)");
-}
-
-function initiateGem() {
-    if (gems < 1) return;
-    currentAction = 'GEM'; mathTasksLeft = 1;
-    closeUpgradeMenu(); openMathModal("FORSTERK TÅRN");
-}
-
-function initiateBoost(tower) {
-    currentAction = 'BOOST';
-    mathTasksLeft = 1;
-    openMathModal("BOOST TÅRN (Dobbel fart 5s)!");
-}
-
-function sellTower() {
-    const sellValue = parseInt(document.getElementById('sell-value').innerText);
-    gold += sellValue;
-    const index = towers.indexOf(selectedTower);
-    if (index > -1) towers.splice(index, 1);
-    closeUpgradeMenu();
-}
-
-function closeTowerMenu() { document.getElementById('tower-select-overlay').classList.add('hidden'); }
-function closeUpgradeMenu() { document.getElementById('tower-upgrade-overlay').classList.add('hidden'); }
-
-// --- MATTE MODAL FUNKSJONER ---
-function performAction() {
-    if (currentAction === 'START_WAVE') {
-        startNextWave();
-    } else if (currentAction === 'BOOST') {
-        selectedTower.boostTimer = 300; 
-        floatingTexts.push(new FloatingText(selectedTower.x, selectedTower.y, "BOOST!", "#39ff14"));
-    } else if (currentAction === 'BUILD') {
-        const stats = TOWER_STATS[pendingTowerType];
-        const t = new Tower(pendingBuildPos.x, pendingBuildPos.y, pendingTowerType);
-        towers.push(t);
-        gold -= stats.cost;
-    } else if (currentAction === 'UPGRADE') {
-        const t = selectedTower;
-        const stats = TOWER_STATS[t.type];
-        let cost = t.level * stats.upgrade.cost_base;
-        t.level++; gold -= cost;
-        
-        if (t.type === 'mine') t.income += stats.upgrade.income_add;
-        else if (t.type === 'ice') t.freeze_duration = Math.round(t.freeze_duration * stats.upgrade.freeze_duration_mult);
-        else if (t.type === 'rapid') { t.rate = Math.round(t.rate * stats.upgrade.rate_mult); t.dmg = Math.round(t.dmg * stats.upgrade.dmg); }
-        else { t.dmg = Math.round(t.dmg * stats.upgrade.dmg); t.range = Math.round(t.range * stats.upgrade.range); }
-    } else if (currentAction === 'GEM') {
-        selectedTower.hasGem = true;
-        selectedTower.dmg = Math.round(selectedTower.dmg * 1.5); 
-        gems -= 1;
-    }
-}
-
-function generateQuestion() {
-    const r = (max) => Math.floor(Math.random() * max) + 1;
-    let diffFactor = maps[selectedMap].difficultyMult + (wave * 0.5); 
-    let q, a;
-    
-    if(mathMode==='add_sub'){ 
-        let range = 20 + Math.floor(diffFactor * 5); 
-        let n1=r(range), n2=r(range); 
-        if(Math.random()>0.5){q=`${n1} + ${n2}`;a=n1+n2} else{if(n1<n2)[n1,n2]=[n2,n1];q=`${n1} - ${n2}`;a=n1-n2}
-    }
-    else if(mathMode==='mult_div'){ 
-        let range = Math.min(12, 5 + Math.ceil(diffFactor/2)); 
-        let n1=r(range)+1, n2=r(range)+1; 
-        if(Math.random()>0.5){q=`${n1} × ${n2}`;a=n1*n2} else{let p=n1*n2;q=`${p} : ${n1}`;a=n2}
-    }
-    else if(mathMode==='frac_add_sub'){ 
-        let d= (r(3)+2)*2, n1=r(d-1), n2=r(d-1); 
-        if(Math.random()>0.5){q=`${n1}/${d} + ${n2}/${d}`;a=`${n1+n2}/${d}`} else{if(n1<n2)[n1,n2]=[n2,n1];q=`${n1}/${d} - ${n2}/${d}`;a=`${n1-n2}/${d}`}} 
-    else if(mathMode==='frac_mult_div'){ 
-        let range = 3 + Math.floor(diffFactor/3);
-        let n1=r(range),d1=r(range)+1,n2=r(range),d2=r(range)+1; 
-        q=`${n1}/${d1} × ${n2}/${d2}`; a=`${n1*n2}/${d1*d2}`; 
-    }
-    return {question:q, answer:a};
-}
-
-function checkAnswer() {
-    const input = document.getElementById('math-answer');
-    const userVal = input.value.trim();
-    let isCorrect = false;
-    
-    if (String(currentMathAnswer).includes('/')) {
-         if (!userVal.includes('/')) isCorrect = (parseFloat(userVal) == eval(currentMathAnswer)); 
-         else { 
-             const [uN, uD] = userVal.split('/').map(Number); 
-             const [cN, cD] = currentMathAnswer.split('/').map(Number); 
-             if (uD && cD && (uN * cD === cN * uD)) isCorrect = true; 
-         }
-    } else { if (parseInt(userVal) === parseInt(currentMathAnswer)) isCorrect = true; }
-
-    if (isCorrect) {
-        mathTasksLeft--;
-        if (mathTasksLeft > 0) {
-            document.getElementById('math-feedback').innerText = "RIKTIG! EN TIL... 🧠";
-            document.getElementById('math-header').innerText = `OPPGRADER ${selectedTower.type.toUpperCase()} (2/2)`;
-            let qa = generateQuestion();
-            document.getElementById('math-question').innerText = qa.question;
-            currentMathAnswer = qa.answer;
-            input.value = ''; input.focus();
-        } else {
-            performAction(); closeModal();
-        }
-    } else {
-        input.style.borderColor = 'red';
-        document.getElementById('math-feedback').innerText = "FEIL! PRØV IGJEN.";
-        setTimeout(() => { input.style.borderColor = '#bdc3c7'; }, 500);
-    }
-}
-
-function openMathModal(title) { 
-    gameState = 'MODAL'; 
-    document.getElementById('math-overlay').classList.remove('hidden'); 
-    document.getElementById('math-header').innerText = title; 
-    document.getElementById('math-feedback').innerText = "";
+    if (!ctx || !
