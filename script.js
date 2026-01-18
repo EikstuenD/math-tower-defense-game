@@ -1,6 +1,8 @@
-/* Version: #11 - Menu Fix & Safe Mode */
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+/* Version: #12 - Crash Proof Menu */
+
+// Vi definerer variablene først, men henter dem ikke før spillet starter
+let canvas = null;
+let ctx = null;
 
 // --- KONFIGURASJON ---
 const GRID_SIZE = 50;
@@ -63,6 +65,11 @@ function generateMapTexture(mapData) {
 }
 
 function initGame() {
+    // SIKRING: Hent canvas nå, i tilfelle det feilet ved innlasting
+    canvas = document.getElementById('gameCanvas');
+    if (!canvas) { alert("Fant ikke gameCanvas! Sjekk HTML."); return; }
+    ctx = canvas.getContext('2d');
+
     if (!selectedMap || !mathMode) return;
     try {
         lives = 20; gold = 100; gems = 0; wave = 1; frameCount = 0;
@@ -91,9 +98,10 @@ function initGame() {
         updateUI();
         initAudio(); 
         
-        // Start spill-loopen kun når vi faktisk starter spillet
+        // Start spill-løkken
         requestAnimationFrame(gameLoop);
     } catch(e) {
+        console.error(e);
         alert("Feil ved oppstart: " + e.message);
     }
 }
@@ -275,8 +283,8 @@ function snapToGrid(x, y) {
 
 // --- DRAWING ---
 function drawGame() {
-    // SIKRING: Ikke tegn noe hvis vi ikke har valgt kart ennå
-    if (!selectedMap || !maps[selectedMap]) return;
+    // SIKRING: Hvis ctx mangler (feil innlasting) eller kart ikke er valgt, stopp tegning
+    if (!ctx || !selectedMap || !maps[selectedMap]) return;
 
     if(mapBackgroundImage) ctx.drawImage(mapBackgroundImage, 0, 0); else ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -320,7 +328,9 @@ function drawGame() {
     });
 }
 
-canvas.addEventListener('mousemove', (e) => {
+// Mussporing lagt til på document for sikkerhet, men sjekker canvas
+document.addEventListener('mousemove', (e) => {
+    if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     mouseX = e.clientX - rect.left;
     mouseY = e.clientY - rect.top;
@@ -488,10 +498,11 @@ function updateUI() {
 // Sikret selectMap funksjon
 function selectMap(btn, mapName) { 
     selectedMap = mapName; 
-    let children = Array.from(btn.parentElement.children);
-    children.forEach(c => {
-        if(c.tagName === 'BUTTON') c.classList.remove('selected-btn');
-    }); 
+    // Gå opp til forelder, finn alle knapper i samme gruppe, fjern markering
+    const parent = btn.parentNode;
+    const siblings = parent.querySelectorAll('button');
+    siblings.forEach(b => b.classList.remove('selected-btn'));
+    
     btn.classList.add('selected-btn'); 
     checkStartReady(); 
 }
@@ -499,15 +510,19 @@ function selectMap(btn, mapName) {
 // Sikret setMathMode funksjon
 function setMathMode(btn, mode) { 
     mathMode = mode; 
-    let children = Array.from(btn.parentElement.children);
-    children.forEach(c => {
-        if(c.tagName === 'BUTTON') c.classList.remove('selected-btn');
-    }); 
+    const parent = btn.parentNode;
+    const siblings = parent.querySelectorAll('button');
+    siblings.forEach(b => b.classList.remove('selected-btn'));
+
     btn.classList.add('selected-btn'); 
     checkStartReady(); 
 }
 
-function checkStartReady() { document.getElementById('start-btn').disabled = !(selectedMap && mathMode); }
+function checkStartReady() { 
+    const startBtn = document.getElementById('start-btn');
+    if(startBtn) startBtn.disabled = !(selectedMap && mathMode); 
+}
+
 function backToMenu() {
     if(!confirm("Avslutte til meny?")) return;
     gameState = 'MENU';
@@ -703,18 +718,4 @@ function openMathModal(title) {
     gameState = 'MODAL'; 
     document.getElementById('math-overlay').classList.remove('hidden'); 
     document.getElementById('math-header').innerText = title; 
-    document.getElementById('math-feedback').innerText = ""; 
-    let qa = generateQuestion(); 
-    document.getElementById('math-question').innerText = qa.question; 
-    currentMathAnswer = qa.answer; 
-    let input = document.getElementById('math-answer'); 
-    input.value = ''; input.focus(); 
-}
-
-function closeModal() { 
-    document.getElementById('math-overlay').classList.add('hidden'); 
-    gameState = 'PLAYING'; gameLoop(); 
-}
-
-function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-document.getElementById('math-answer').addEventListener("keypress", function(e) { if (e.key === "Enter") checkAnswer(); });
+    document.getElementById('math-feedback').innerText = "";
