@@ -1,4 +1,4 @@
-/* Version: #10 - Fix Build During Wave */
+/* Version: #11 - Menu Fix & Safe Mode */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -31,7 +31,7 @@ let pathSegments = [];
 let pendingBuildPos = null, pendingTowerType = null;
 let selectedTower = null; 
 let currentMathAnswer = null;
-let currentAction = ''; // 'BUILD', 'UPGRADE', 'GEM', 'START_WAVE', 'BOOST'
+let currentAction = ''; 
 let audioCtx = null;
 let waveEnemiesSpawned = 0;
 
@@ -90,7 +90,9 @@ function initGame() {
         
         updateUI();
         initAudio(); 
-        gameLoop();
+        
+        // Start spill-loopen kun når vi faktisk starter spillet
+        requestAnimationFrame(gameLoop);
     } catch(e) {
         alert("Feil ved oppstart: " + e.message);
     }
@@ -99,9 +101,9 @@ function initGame() {
 function gameLoop() {
     if (gameState !== 'PLAYING') return;
 
-    // NY ENDRING: Vi pauser oppdateringen (fiender fryser) hvis byggemenyen er åpen
-    // Dette gjør det mindre stressende å bygge, og bekrefter at menyen virker.
-    const isBuildMenuOpen = !document.getElementById('tower-select-overlay').classList.contains('hidden');
+    // Sjekk om byggemenyen er åpen (Safe check)
+    const overlay = document.getElementById('tower-select-overlay');
+    const isBuildMenuOpen = overlay && !overlay.classList.contains('hidden');
     
     if (!isBuildMenuOpen) {
         for(let i=0; i<speedMultiplier; i++) updateGame();
@@ -122,11 +124,9 @@ function updateGame() {
         });
     }
 
-    // Boss Paralyze Check
     const bossPresent = enemies.some(e => e.type === 'boss');
     if (bossPresent && frameCount % (240 / speedMultiplier) === 0) paralyzeTowers();
 
-    // Spawn Logic
     if(waveActive) {
         let enemiesToSpawn = 5 + (wave * 2);
         if (wave % 5 === 0) enemiesToSpawn += 1; 
@@ -143,7 +143,6 @@ function updateGame() {
         if (enemies.length === 0 && waveEnemiesSpawned >= enemiesToSpawn) endWave();
     }
 
-    // Entities Update
     for (let i = enemies.length - 1; i >= 0; i--) {
         let e = enemies[i];
         e.update();
@@ -243,8 +242,10 @@ function toggleSpeed() {
 
 function updateSpeedBtn() {
     const btn = document.getElementById('speed-btn');
-    btn.innerText = `⏩ ${speedMultiplier}x`;
-    btn.classList.toggle('btn-speed-active', speedMultiplier === 3);
+    if(btn) {
+        btn.innerText = `⏩ ${speedMultiplier}x`;
+        btn.classList.toggle('btn-speed-active', speedMultiplier === 3);
+    }
 }
 
 // --- GRID & PATH LOGIKK ---
@@ -274,6 +275,9 @@ function snapToGrid(x, y) {
 
 // --- DRAWING ---
 function drawGame() {
+    // SIKRING: Ikke tegn noe hvis vi ikke har valgt kart ennå
+    if (!selectedMap || !maps[selectedMap]) return;
+
     if(mapBackgroundImage) ctx.drawImage(mapBackgroundImage, 0, 0); else ctx.clearRect(0,0,canvas.width,canvas.height);
 
     let mapData = maps[selectedMap]; 
@@ -291,7 +295,8 @@ function drawGame() {
         for (let x = 0; x <= canvas.width; x += GRID_SIZE) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
         for (let y = 0; y <= canvas.height; y += GRID_SIZE) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
         
-        if (document.getElementById('tower-select-overlay').classList.contains('hidden')) {
+        let overlay = document.getElementById('tower-select-overlay');
+        if (overlay && overlay.classList.contains('hidden')) {
             let snapped = snapToGrid(mouseX, mouseY);
             let onPath = isPointOnPath(snapped.x, snapped.y);
             let hasTower = towers.some(t => t.x === snapped.x && t.y === snapped.y);
@@ -480,16 +485,28 @@ function updateUI() {
     document.getElementById('gems-display').innerText = gems;
 }
 
+// Sikret selectMap funksjon
 function selectMap(btn, mapName) { 
     selectedMap = mapName; 
-    [...btn.parentElement.children].forEach(c => {if(c.tagName==='BUTTON') c.classList.remove('selected-btn')}); 
-    btn.classList.add('selected-btn'); checkStartReady(); 
+    let children = Array.from(btn.parentElement.children);
+    children.forEach(c => {
+        if(c.tagName === 'BUTTON') c.classList.remove('selected-btn');
+    }); 
+    btn.classList.add('selected-btn'); 
+    checkStartReady(); 
 }
+
+// Sikret setMathMode funksjon
 function setMathMode(btn, mode) { 
     mathMode = mode; 
-    [...btn.parentElement.children].forEach(c => {if(c.tagName==='BUTTON') c.classList.remove('selected-btn')}); 
-    btn.classList.add('selected-btn'); checkStartReady(); 
+    let children = Array.from(btn.parentElement.children);
+    children.forEach(c => {
+        if(c.tagName === 'BUTTON') c.classList.remove('selected-btn');
+    }); 
+    btn.classList.add('selected-btn'); 
+    checkStartReady(); 
 }
+
 function checkStartReady() { document.getElementById('start-btn').disabled = !(selectedMap && mathMode); }
 function backToMenu() {
     if(!confirm("Avslutte til meny?")) return;
@@ -502,10 +519,11 @@ function backToMenu() {
 document.getElementById('gameCanvas').addEventListener('mousedown', function(e) {
     if (gameState !== 'PLAYING') return;
     
-    // NY FIX: Klikke-radius redusert fra 30 til 20 for å unngå å treffe nabo-tårn ved feil
+    // Klikke-radius 20 for å være mer presis
     let clickedTower = towers.find(t => Math.hypot(t.x - mouseX, t.y - mouseY) < 20);
     
     if (clickedTower) {
+        // Klikk på tårn gir BOOST (hvis ikke gruve)
         if (waveActive && clickedTower.type !== 'mine') {
             selectedTower = clickedTower;
             initiateBoost(clickedTower);
@@ -695,4 +713,8 @@ function openMathModal(title) {
 
 function closeModal() { 
     document.getElementById('math-overlay').classList.add('hidden'); 
-    gameState = 'PLA
+    gameState = 'PLAYING'; gameLoop(); 
+}
+
+function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+document.getElementById('math-answer').addEventListener("keypress", function(e) { if (e.key === "Enter") checkAnswer(); });
