@@ -1,4 +1,4 @@
-/* Version: #8 - More Math Edition */
+/* Version: #9 - Build During Wave Edition */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -123,7 +123,7 @@ function updateGame() {
         let enemiesToSpawn = 5 + (wave * 2);
         if (wave % 5 === 0) enemiesToSpawn += 1; 
 
-        let spawnRate = Math.max(20, 80 - (wave * 3)); // Raskere spawn ved høyere waves
+        let spawnRate = Math.max(20, 80 - (wave * 3)); 
         
         if (waveEnemiesSpawned < enemiesToSpawn) { 
             if (frameCount % spawnRate === 0) { 
@@ -193,7 +193,6 @@ function endWave() {
     updateSpeedBtn();
 }
 
-// NY FUNKSJON FOR Å STARTE BØLGE
 function initiateStartWave() {
     currentAction = 'START_WAVE';
     mathTasksLeft = 1;
@@ -289,7 +288,6 @@ function drawGame() {
             let onPath = isPointOnPath(snapped.x, snapped.y);
             let hasTower = towers.some(t => t.x === snapped.x && t.y === snapped.y);
             
-            // Fargeindikator for grid: Rød hvis opptatt/vei, Grønn hvis ledig, Blå hvis oppgradering (når du holder over tårn)
             if (hasTower) ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
             else if (onPath) ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
             else ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
@@ -322,7 +320,6 @@ class Enemy {
         this.type = type; this.finished = false; this.frozen = 0;
         
         let difficultyBoost = hardModeActive ? 1.3 : 1.0;
-        // Økt HP skalering for å balansere spillet
         const HP_SCALE = (1 + (wave * 0.25)) * difficultyBoost; 
         const SPEED_SCALE = 1 + (wave * 0.05);
         
@@ -375,7 +372,7 @@ class Tower {
         this.x = x; this.y = y; this.type = type;
         this.level = 1; this.cooldown = 0; this.paralyzed = 0;
         this.hasGem = false; 
-        this.boostTimer = 0; // Ny funksjon: Boost fra matte
+        this.boostTimer = 0; 
         const stats = TOWER_STATS[type];
         this.dmg = stats.dmg; this.range = stats.range; this.rate = stats.rate; this.emoji = stats.emoji;
         
@@ -384,7 +381,7 @@ class Tower {
     }
     update() {
         if (this.paralyzed > 0) { this.paralyzed--; return; } 
-        if (this.boostTimer > 0) this.boostTimer--; // Tell ned boost
+        if (this.boostTimer > 0) this.boostTimer--; 
 
         if(this.type === 'mine') return; 
 
@@ -397,22 +394,20 @@ class Tower {
             }
             if (target) {
                 projectiles.push(new Projectile(this.x, this.y, target, this.type, this.dmg * (this.hasGem ? 1.5 : 1), this.freeze_duration));
-                // Hvis boostet: Halv cooldown (dobbelt så rask)
                 this.cooldown = (this.boostTimer > 0) ? this.rate / 2 : this.rate;
             }
         }
     }
     draw() {
-        // Visuell effekt for boost
         if (this.boostTimer > 0) {
-            ctx.shadowBlur = 15; ctx.shadowColor = "#39ff14"; // Neon green glow
+            ctx.shadowBlur = 15; ctx.shadowColor = "#39ff14"; 
         } else {
             ctx.shadowBlur = 0;
         }
 
         ctx.fillStyle = this.paralyzed > 0 ? '#444' : (this.type === 'mine' ? '#f1c40f' : '#7f8c8d');
         ctx.fillRect(this.x - 15, this.y - 15, 30, 30);
-        ctx.shadowBlur = 0; // Reset glow
+        ctx.shadowBlur = 0; 
 
         ctx.font = '24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(this.emoji, this.x, this.y);
@@ -501,20 +496,18 @@ document.getElementById('gameCanvas').addEventListener('mousedown', function(e) 
     
     let clickedTower = towers.find(t => Math.hypot(t.x - mouseX, t.y - mouseY) < 30);
     
-    // NY LOGIKK: Hvis bølge er aktiv, aktiver SUPER-BOOST istedenfor oppgradering
     if (clickedTower) {
         if (waveActive && clickedTower.type !== 'mine') {
             selectedTower = clickedTower;
             initiateBoost(clickedTower);
         } else {
-            // Hvis bølge ikke er aktiv (eller det er en gruve), åpne vanlig meny
             selectedTower = clickedTower;
             openUpgradeMenu();
         }
         return;
     }
 
-    if (waveActive) return; // Kan ikke bygge nye tårn mens bølgen går
+    // Har fjernet "if (waveActive) return;" slik at du kan bygge når som helst.
 
     let snapped = snapToGrid(mouseX, mouseY);
     if (isPointOnPath(snapped.x, snapped.y)) { alert("Kan ikke bygge på veien!"); return; }
@@ -598,7 +591,6 @@ function performAction() {
     if (currentAction === 'START_WAVE') {
         startNextWave();
     } else if (currentAction === 'BOOST') {
-        // Boost effekten: Dobbel skuddtakt (halv cooldown) i 300 frames (ca 5 sekunder ved 60fps)
         selectedTower.boostTimer = 300; 
         floatingTexts.push(new FloatingText(selectedTower.x, selectedTower.y, "BOOST!", "#39ff14"));
     } else if (currentAction === 'BUILD') {
